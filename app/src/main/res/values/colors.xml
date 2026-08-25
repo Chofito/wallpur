@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF151617</color>
+    <color name="ginger">#D98945</color>
+    <color name="notif_action_bg">#26D98945</color>
+    <color name="notif_control_icon">#151617</color>
+    <color name="notif_ripple">#40D98945</color>
+    <color name="notif_power_chip_bg">#DDF6E7</color>
+    <color name="notif_power_chip_text">#17663D</color>
+    <color name="white">#FFF7F6F2</color>
+</resources>

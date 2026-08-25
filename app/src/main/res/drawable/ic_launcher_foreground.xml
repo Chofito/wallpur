@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Keep the complete cat inside Android's 66x66 adaptive-icon safe zone. Launchers are free
+         to apply tighter circle/squircle masks than the preview shown by Android Studio. -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.82"
+        android:scaleY="0.82">
+        <path
+            android:fillColor="#151617"
+            android:pathData="M22,43.3V25.7c0,-4 4.7,-6.1 7.7,-3.5l13.1,11.3A39.5,39.5 0,0 1,54 31.9c3.9,0 7.7,0.6 11.2,1.6l13.1,-11.3c3,-2.6 7.7,-0.5 7.7,3.5v17.6A32.3,32.3 0,0 1,92 62c0,18.4 -16.4,31 -38,31S16,80.4 16,62c0,-6.9 2.1,-13.3 6,-18.7Z" />
+        <path
+            android:fillColor="#F7F6F2"
+            android:pathData="M38,48h32c3.87,0 7,3.13 7,7v15c0,3.87 -3.13,7 -7,7H38c-3.87,0 -7,-3.13 -7,-7V55c0,-3.87 3.13,-7 7,-7Z" />
+        <path
+            android:fillColor="#D98945"
+            android:pathData="M66.5,53.2a3.8,3.8 0,1 0,0 7.6a3.8,3.8 0,1 0,0 -7.6" />
+        <path
+            android:fillColor="#5F6D78"
+            android:pathData="M35,72l10.8,-11 7.5,7.4 7.3,-8.1L73,72Z" />
+        <path
+            android:fillColor="#D98945"
+            android:pathData="M35,71.9h38v2.8H35Z" />
+    </group>
+</vector>

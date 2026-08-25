@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-labelledby="title desc">
+  <title id="title">Wallpurr redondo</title>
+  <desc id="desc">Una cabeza de gato contiene una pequeña ventana de paisaje.</desc>
+  <circle cx="54" cy="54" r="54" fill="#D98945"/>
+  <g transform="translate(9.72 9.72) scale(.82)">
+    <path fill="#151617" d="M22 43.3V25.7c0-4 4.7-6.1 7.7-3.5l13.1 11.3A39.5 39.5 0 0 1 54 31.9c3.9 0 7.7.6 11.2 1.6l13.1-11.3c3-2.6 7.7-.5 7.7 3.5v17.6a32.3 32.3 0 0 1 6 18.7c0 18.4-16.4 31-38 31S16 80.4 16 62c0-6.9 2.1-13.3 6-18.7Z"/>
+    <rect x="31" y="48" width="46" height="29" rx="7" fill="#F7F6F2"/>
+    <circle cx="66.5" cy="57" r="3.8" fill="#D98945"/>
+    <path fill="#5F6D78" d="m35 72 10.8-11 7.5 7.4 7.3-8.1L73 72H35Z"/>
+    <path fill="#D98945" d="M35 71.9h38v2.8H35z"/>
+  </g>
+</svg>
