@@ -9,6 +9,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.os.Build
+import dev.chofito.wallpurr.storage.LockStyle
 import dev.chofito.wallpurr.editor.DeviceViewport
 import dev.chofito.wallpurr.editor.ImageLayout
 import dev.chofito.wallpurr.editor.ImageTransform
@@ -113,7 +114,7 @@ class WallpaperApplier(
             try {
                 val rendered = render(source, width, height, transform)
                 val styled = try {
-                    applyLockStyle(rendered, style, blurScale)
+                    applyLockStyleGpuFirst(rendered, style, blurScale)
                 } catch (error: Throwable) {
                     rendered.recycle()
                     throw error
@@ -277,4 +278,17 @@ class WallpaperApplier(
 sealed interface ApplyResult {
     data object Ok : ApplyResult
     data class Error(val message: String) : ApplyResult
+}
+
+/** Blurs on the GPU on Android 12+ and falls back to the CPU renderer on older versions or failure. */
+private fun applyLockStyleGpuFirst(rendered: Bitmap, style: LockStyle, blurScale: Float): Bitmap {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && style.clamped().hasEffects) {
+        val gpu = try {
+            applyLockStyleGpu(rendered, style, blurScale)
+        } catch (_: Throwable) {
+            null
+        }
+        if (gpu != null) return gpu
+    }
+    return applyLockStyle(rendered, style, blurScale)
 }

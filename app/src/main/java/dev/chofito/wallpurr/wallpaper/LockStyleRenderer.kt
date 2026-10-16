@@ -78,7 +78,7 @@ internal fun blurLockBitmap(
  * one-LSB ordered dither keeps the average color unchanged while breaking those visible bands.
  * It is intentionally applied only to lock blur output, never to the zero-effect fast path.
  */
-private fun applyOrderedDither(bitmap: Bitmap) {
+internal fun applyOrderedDither(bitmap: Bitmap) {
     if (!bitmap.isMutable || bitmap.width <= 0 || bitmap.height <= 0) return
     val width = bitmap.width
     val row = IntArray(width)
