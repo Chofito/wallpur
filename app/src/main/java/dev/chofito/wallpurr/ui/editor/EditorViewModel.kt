@@ -57,6 +57,9 @@ class EditorViewModel(
     val state = MutableStateFlow(EditorUiState(orientation = startOrientation))
     private var portrait = ImageTransform.Default
     private var landscape = ImageTransform.Default
+    // Until the stored profiles are read, portrait/landscape/state hold defaults. Any save before
+    // that point (e.g. Back pressed during the initial load) would overwrite the user's framing.
+    private var loaded = false
     private var saveJob: Job? = null
     private var lockStyleJob: Job? = null
     private var videoJob: Job? = null
@@ -100,6 +103,7 @@ class EditorViewModel(
                     ?.coerceIn(LockStyle.MIN_OPACITY, 1f) ?: 1f,
                 hasPlaylistContext = sourcePlaylist != null,
             )
+            loaded = true
         }
     }
 
@@ -113,6 +117,7 @@ class EditorViewModel(
     }
 
     fun update(transform: ImageTransform, persistNow: Boolean = false) {
+        if (!loaded) return
         val current = state.value
         val clamped = current.bitmap?.let { bitmap ->
             if (viewportWidth > 0f && viewportHeight > 0f) {
@@ -216,6 +221,10 @@ class EditorViewModel(
     }
 
     fun commitTransform(onCommitted: () -> Unit = {}) {
+        if (!loaded) {
+            onCommitted()
+            return
+        }
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             // Persist both profiles so switching orientation during the debounce cannot cancel the
@@ -268,6 +277,7 @@ class EditorViewModel(
     fun commitLockStyle() = persistLockStyle()
 
     private fun persistVideo(persistNow: Boolean = false) {
+        if (!loaded) return
         videoJob?.cancel()
         videoJob = viewModelScope.launch {
             if (!persistNow) delay(180)
@@ -283,6 +293,7 @@ class EditorViewModel(
     }
 
     private fun persistLockStyle() {
+        if (!loaded) return
         lockStyleJob?.cancel()
         lockStyleJob = viewModelScope.launch {
             val current = state.value
