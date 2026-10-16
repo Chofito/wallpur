@@ -39,7 +39,7 @@ fun playlistsViewModel(): PlaylistsViewModel {
     val container = LocalContext.current.container()
     return viewModel(
         factory = viewModelFactory {
-            initializer { PlaylistsViewModel(container.repository) }
+            initializer { PlaylistsViewModel(container.repository, container.rotation) }
         },
     )
 }

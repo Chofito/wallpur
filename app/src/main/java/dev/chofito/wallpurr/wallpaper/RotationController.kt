@@ -206,6 +206,20 @@ class RotationController(
         result
     }
 
+    /**
+     * Deletes a playlist under the rotation lock. If it was the active one, the pending timer and
+     * the ongoing notification would otherwise outlive it, so both are torn down here.
+     */
+    suspend fun deletePlaylist(id: String) = commands.withLock {
+        val wasActive = container.repository.activePlaylistId() == id
+        container.repository.deletePlaylist(id)
+        if (wasActive) {
+            invalidateScheduleLocked()
+            container.notifier.cancel()
+            container.wallpaperPulse.emit(WallpaperPulse.Reload)
+        }
+    }
+
     suspend fun play() = commands.withLock {
         container.repository.setRotationPaused(false)
         scheduleCurrentLocked()
