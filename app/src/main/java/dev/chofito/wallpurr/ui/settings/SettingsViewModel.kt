@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.chofito.wallpurr.R
 import dev.chofito.wallpurr.storage.WallpurrRepository
+import dev.chofito.wallpurr.storage.HiddenAutoLock
 import dev.chofito.wallpurr.storage.PowerSavePolicy
 import dev.chofito.wallpurr.wallpaper.RotationNotifier
 import dev.chofito.wallpurr.wallpaper.RotationController
@@ -64,6 +65,13 @@ class SettingsViewModel(
         viewModelScope.launch {
             repository.setFlag(WallpurrRepository.KEY_CHANGE_ON_HOME_TAP, value)
         }
+    }
+
+    val hiddenAutoLock = repository.observeHiddenAutoLock()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HiddenAutoLock.OnLeave)
+
+    fun setHiddenAutoLock(policy: HiddenAutoLock) {
+        viewModelScope.launch { repository.setHiddenAutoLock(policy) }
     }
 
     fun setPowerSavePolicy(policy: PowerSavePolicy) {

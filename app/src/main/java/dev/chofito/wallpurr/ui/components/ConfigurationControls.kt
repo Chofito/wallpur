@@ -2,6 +2,8 @@ package dev.chofito.wallpurr.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,10 +12,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BlurOn
 import androidx.compose.material.icons.outlined.BatterySaver
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
@@ -30,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.chofito.wallpurr.R
+import dev.chofito.wallpurr.storage.HiddenAutoLock
 import dev.chofito.wallpurr.storage.LockStyle
 import dev.chofito.wallpurr.storage.PowerSavePolicy
 import kotlin.math.roundToInt
@@ -109,6 +114,65 @@ fun PowerSaveSelector(
         )
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun HiddenAutoLockSelector(
+    policy: HiddenAutoLock,
+    onSelect: (HiddenAutoLock) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ConfigurationSurface(
+        icon = { Icon(Icons.Outlined.VisibilityOff, contentDescription = null) },
+        title = stringResource(R.string.hidden_auto_lock_title),
+        supporting = stringResource(R.string.hidden_auto_lock_hint),
+        modifier = modifier,
+    ) {
+        val afterMinutes = policy as? HiddenAutoLock.AfterMinutes
+            ?: HiddenAutoLock.AfterMinutes(DEFAULT_HIDDEN_AUTO_LOCK_MINUTES)
+        val options = listOf(
+            HiddenAutoLock.OnLeave to stringResource(R.string.hidden_auto_lock_on_leave),
+            afterMinutes to stringResource(R.string.hidden_auto_lock_after),
+            HiddenAutoLock.Manual to stringResource(R.string.hidden_auto_lock_manual),
+        )
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            options.forEachIndexed { index, (option, label) ->
+                SegmentedButton(
+                    selected = policy::class == option::class,
+                    onClick = { onSelect(option) },
+                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                    label = { Text(label) },
+                )
+            }
+        }
+        if (policy is HiddenAutoLock.AfterMinutes) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                HiddenAutoLock.MINUTE_OPTIONS.forEach { minutes ->
+                    FilterChip(
+                        selected = policy.minutes == minutes,
+                        onClick = { onSelect(HiddenAutoLock.AfterMinutes(minutes)) },
+                        label = { Text(stringResource(R.string.hidden_auto_lock_minutes, minutes)) },
+                    )
+                }
+            }
+        }
+        Text(
+            text = when (policy) {
+                HiddenAutoLock.OnLeave -> stringResource(R.string.hidden_auto_lock_on_leave_detail)
+                is HiddenAutoLock.AfterMinutes ->
+                    stringResource(R.string.hidden_auto_lock_after_detail, policy.minutes)
+                HiddenAutoLock.Manual -> stringResource(R.string.hidden_auto_lock_manual_detail)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private const val DEFAULT_HIDDEN_AUTO_LOCK_MINUTES = 5
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

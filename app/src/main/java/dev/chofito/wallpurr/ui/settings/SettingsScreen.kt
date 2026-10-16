@@ -47,7 +47,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chofito.wallpurr.R
 import dev.chofito.wallpurr.ui.components.IconBubble
 import dev.chofito.wallpurr.ui.components.PurrCard
+import dev.chofito.wallpurr.ui.components.HiddenAutoLockSelector
 import dev.chofito.wallpurr.ui.components.PowerSaveSelector
+import dev.chofito.wallpurr.ui.components.hiddenContentRevealed
 import dev.chofito.wallpurr.ui.settingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,6 +64,8 @@ fun SettingsScreen(
     val playVideoOnLock by viewModel.playVideoOnLock.collectAsStateWithLifecycle()
     val changeOnHomeTap by viewModel.changeOnHomeTap.collectAsStateWithLifecycle()
     val powerSavePolicy by viewModel.powerSavePolicy.collectAsStateWithLifecycle()
+    val hiddenAutoLock by viewModel.hiddenAutoLock.collectAsStateWithLifecycle()
+    val hiddenRevealed = hiddenContentRevealed()
     val snackbar = remember { SnackbarHostState() }
     var confirmReset by remember { mutableStateOf(false) }
     var showPrivacy by remember { mutableStateOf(false) }
@@ -170,6 +174,15 @@ fun SettingsScreen(
                         Switch(checked = pauseVideo, onCheckedChange = { viewModel.setPauseVideoHidden(it) })
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+            // Only discoverable while hidden content is revealed, so the settings screen does not
+            // advertise that anything is hidden.
+            if (hiddenRevealed) {
+                Text(stringResource(R.string.hidden_title), style = MaterialTheme.typography.titleLarge)
+                HiddenAutoLockSelector(
+                    policy = hiddenAutoLock,
+                    onSelect = viewModel::setHiddenAutoLock,
                 )
             }
             Text(stringResource(R.string.battery_title), style = MaterialTheme.typography.titleLarge)
