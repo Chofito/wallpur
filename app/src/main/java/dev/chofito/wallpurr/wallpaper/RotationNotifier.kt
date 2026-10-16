@@ -142,7 +142,8 @@ class RotationNotifier(private val context: Context) {
         ensureChannel()
         val notification = build(
             playlistId = playlistId,
-            playlistName = playlist.name,
+            // The shade and the lock screen are visible to anyone nearby.
+            playlistName = if (playlist.hidden) context.getString(R.string.app_name) else playlist.name,
             target = WallpaperTarget.from(playlist.target),
             scheduleLine = scheduleLine,
             powerSaveMode = powerSaveMode,
