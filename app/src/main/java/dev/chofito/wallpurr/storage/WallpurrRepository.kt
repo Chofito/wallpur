@@ -120,7 +120,14 @@ class WallpurrRepository(
                 PlaylistItemEntity(playlistId = playlistId, imageId = imageId, sortOrder = index)
             },
         )
-        persistShuffle(playlistId, ShuffleEngine.start(imageIds))
+        // The new order becomes the cycle, but the wallpaper on screen stays current instead of
+        // jumping back to the first item.
+        val ordered = ShuffleEngine.start(imageIds)
+        val current = db.shuffle().get(playlistId)?.currentImageId
+        persistShuffle(
+            playlistId,
+            current?.let { ShuffleEngine.select(ordered, it, imageIds) } ?: ordered,
+        )
     }
 
     suspend fun createFolder(name: String): FolderEntity {
@@ -282,17 +289,17 @@ class WallpurrRepository(
             )
             order += 1
         }
-        persistShuffle(playlistId, ShuffleEngine.start(playlistImageIds(playlistId)))
+        ensureShuffle(playlistId)
     }
 
     suspend fun removeImageFromPlaylist(playlistId: String, imageId: String) {
         db.playlistItems().delete(playlistId, imageId)
-        persistShuffle(playlistId, ShuffleEngine.start(playlistImageIds(playlistId)))
+        ensureShuffle(playlistId)
     }
 
     suspend fun removeImagesFromPlaylist(playlistId: String, imageIds: List<String>) {
         imageIds.forEach { db.playlistItems().delete(playlistId, it) }
-        persistShuffle(playlistId, ShuffleEngine.start(playlistImageIds(playlistId)))
+        ensureShuffle(playlistId)
     }
 
     suspend fun playlistImageIds(playlistId: String): List<String> =
@@ -308,15 +315,17 @@ class WallpurrRepository(
 
     suspend fun getPlaylist(id: String): PlaylistEntity? = db.playlists().get(id)
 
+    /**
+     * Returns the cursor aligned with the playlist's current items. Membership changes keep the
+     * current image and the upcoming (possibly shuffled) order; restarting the cycle here would
+     * move the wallpaper and orphan the pending rotation timer, which targets the current image.
+     */
     suspend fun ensureShuffle(playlistId: String): ShuffleState {
         val ids = playlistImageIds(playlistId)
         val existing = db.shuffle().get(playlistId)?.toState()
-        if (existing?.currentImageId != null && existing.currentImageId in ids) {
-            return existing
-        }
-        val started = ShuffleEngine.start(ids)
-        persistShuffle(playlistId, started)
-        return started
+        val aligned = existing?.let { ShuffleEngine.reconcile(it, ids) } ?: ShuffleEngine.start(ids)
+        if (aligned != existing) persistShuffle(playlistId, aligned)
+        return aligned
     }
 
     suspend fun resetShuffle(playlistId: String): ShuffleState {

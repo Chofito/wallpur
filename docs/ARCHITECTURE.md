@@ -193,9 +193,12 @@ historyIds | currentImageId | remainingIds
 - inicio ordenado o barajado;
 - siguiente con loop;
 - anterior con wrap del primero al último;
-- selección directa sin perder lo que queda antes/después en el ciclo actual.
+- selección directa sin perder lo que queda antes/después en el ciclo actual;
+- `reconcile`: alinear el cursor con los miembros actuales sin reiniciar el ciclo.
 
-El repository persiste el resultado después de cada operación. Reordenar o cambiar miembros reconstruye el cursor para no conservar ids inválidos.
+El repository persiste el resultado después de cada operación. Cambiar miembros reconcilia el cursor:
+quita ids inválidos, agrega los nuevos a los pendientes y conserva el medio actual. Reordenar usa el
+nuevo orden como ciclo, posicionado en el medio actual. Ver `CRITICAL_PATHS.md` §3.
 
 ## Coordinación de rotación
 

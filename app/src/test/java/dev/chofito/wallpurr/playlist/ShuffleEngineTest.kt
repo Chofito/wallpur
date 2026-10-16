@@ -62,4 +62,54 @@ class ShuffleEngineTest {
         state = ShuffleEngine.previous(state, ids)
         assertEquals(first, state.currentImageId)
     }
+
+    @Test
+    fun reconcileKeepsCurrentAndShuffledOrderWhenImagesAreAdded() {
+        val state = ShuffleState(listOf("c", "a"), listOf("d"), "b")
+        val result = ShuffleEngine.reconcile(state, listOf("a", "b", "c", "d", "e"))
+        assertEquals("b", result.currentImageId)
+        assertEquals(listOf("c", "a", "e"), result.remainingIds)
+        assertEquals(listOf("d"), result.historyIds)
+    }
+
+    @Test
+    fun reconcileDropsDeletedIdsAndReplacesRemovedCurrent() {
+        val state = ShuffleState(listOf("c", "d"), listOf("a"), "b")
+        val result = ShuffleEngine.reconcile(state, listOf("a", "c", "d"))
+        assertEquals("c", result.currentImageId)
+        assertEquals(listOf("d"), result.remainingIds)
+        assertEquals(listOf("a"), result.historyIds)
+    }
+
+    @Test
+    fun reconcileIsStableWhenMembershipIsUnchanged() {
+        val state = ShuffleState(listOf("c"), listOf("a"), "b")
+        assertEquals(state, ShuffleEngine.reconcile(state, listOf("a", "b", "c")))
+    }
+
+    @Test
+    fun nextNeverReturnsADeletedImage() {
+        val state = ShuffleState(listOf("gone", "c"), listOf("a"), "b")
+        val next = ShuffleEngine.next(state, listOf("a", "b", "c"))
+        assertEquals("c", next.currentImageId)
+    }
+
+    @Test
+    fun nextDoesNotSkipWhenTheCurrentImageWasDeleted() {
+        val state = ShuffleState(listOf("c", "d"), listOf("a"), "b")
+        val next = ShuffleEngine.next(state, listOf("a", "c", "d"))
+        assertEquals("c", next.currentImageId)
+    }
+
+    @Test
+    fun cycleKeepsShuffledOrderAfterAnImageIsAdded() {
+        val ids = listOf("a", "b", "c")
+        var state = ShuffleState(listOf("a", "b"), emptyList(), "c")
+        state = ShuffleEngine.next(state, ids + "d")
+        state = ShuffleEngine.next(state, ids + "d")
+        state = ShuffleEngine.next(state, ids + "d")
+        assertEquals("d", state.currentImageId)
+        state = ShuffleEngine.next(state, ids + "d")
+        assertEquals("c", state.currentImageId)
+    }
 }

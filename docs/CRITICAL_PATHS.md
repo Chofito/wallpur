@@ -73,7 +73,11 @@ Comportamientos que deben conservarse:
 - barajar modifica el ciclo persistido;
 - “orden de lista” reconstruye el ciclo con `sortOrder`.
 
-Los cambios de miembros o reorder reinician el cursor para eliminar ids obsoletos.
+Los cambios de miembros (agregar, quitar, borrar medios) **no** reinician el cursor:
+`ShuffleEngine.reconcile` elimina ids obsoletos, agrega los nuevos al final de los pendientes
+(conservando un orden ya barajado) y mantiene el medio actual. Reiniciar el cursor movía el wallpaper
+y dejaba huérfano al worker pendiente, que apunta al medio actual: la rotación se detenía en silencio.
+Reordenar convierte el nuevo orden en ciclo, pero también conserva el medio actual.
 
 ## 4. Ownership del wallpaper `Surface`
 

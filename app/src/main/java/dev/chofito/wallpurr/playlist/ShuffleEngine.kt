@@ -23,6 +23,30 @@ object ShuffleEngine {
         return ShuffleState(remaining, emptyList(), current)
     }
 
+    /**
+     * Aligns a persisted cursor with the playlist's current membership without restarting the
+     * cycle. Removed ids disappear, new ids are appended to the upcoming order (preserving an
+     * already shuffled order) and the current image is kept while it still belongs to the
+     * playlist. When the current image was removed, the next upcoming image takes its place.
+     */
+    fun reconcile(state: ShuffleState, allIds: List<String>): ShuffleState {
+        if (allIds.isEmpty()) return ShuffleState(emptyList(), emptyList(), null)
+        val allowed = allIds.toSet()
+        val current = state.currentImageId?.takeIf { it in allowed }
+        val seen = mutableSetOf<String>()
+        current?.let(seen::add)
+        val history = state.historyIds.filter { it in allowed && seen.add(it) }
+        val remaining = buildList {
+            state.remainingIds.forEach { id -> if (id in allowed && seen.add(id)) add(id) }
+            allIds.forEach { id -> if (seen.add(id)) add(id) }
+        }
+        return when {
+            current != null -> ShuffleState(remaining, history, current)
+            remaining.isNotEmpty() -> ShuffleState(remaining.drop(1), history, remaining.first())
+            else -> ShuffleState(history.drop(1), emptyList(), history.first())
+        }
+    }
+
     fun next(
         state: ShuffleState,
         allIds: List<String>,
@@ -31,12 +55,16 @@ object ShuffleEngine {
         if (allIds.isEmpty()) {
             return ShuffleState(emptyList(), emptyList(), null)
         }
-        val remaining = state.remainingIds.toMutableList()
-        val history = state.historyIds.toMutableList()
-        state.currentImageId?.let { history.add(it) }
+        val clean = reconcile(state, allIds)
+        // A removed current image was already replaced by the next upcoming one; advancing again
+        // would silently skip an item.
+        if (clean.currentImageId != state.currentImageId) return clean
+        val remaining = clean.remainingIds.toMutableList()
+        val history = clean.historyIds.toMutableList()
+        clean.currentImageId?.let { history.add(it) }
         if (remaining.isEmpty()) {
             val allowed = allIds.toSet()
-            val cycle = (history + listOfNotNull(state.currentImageId))
+            val cycle = (history + listOfNotNull(clean.currentImageId))
                 .filter { it in allowed }
                 .distinct()
                 .ifEmpty { allIds }
