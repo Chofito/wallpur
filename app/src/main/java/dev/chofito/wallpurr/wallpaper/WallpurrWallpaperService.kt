@@ -2598,7 +2598,10 @@ private class HardwareBlurCache {
             Key(it, canvas.width, canvas.height, transform, blurLevel, radiusPx)
         }
         val cached = node
-        if (cacheFrame && cached != null && key == nextKey) {
+        // HWUI frees a RenderNode's display list once the node leaves the drawn tree. A shared
+        // Home/Lock engine draws Home frames without this node after unlocking, so on the next
+        // lock the cached node is empty: drawing it renders nothing and the blur disappears.
+        if (cacheFrame && cached != null && key == nextKey && cached.hasDisplayList()) {
             drawBlurNode(canvas, cached, renderWidth, renderHeight)
             drawColorDither(canvas)
             return true
