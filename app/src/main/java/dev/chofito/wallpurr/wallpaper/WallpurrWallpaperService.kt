@@ -63,6 +63,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.math.hypot
@@ -1929,10 +1930,17 @@ class WallpurrWallpaperService : WallpaperService() {
                 (rendersLockScreen() && playlistTarget != WallpaperTarget.HOME)
 
         private suspend fun releaseMediaAndAwait() {
-            suspendCancellableCoroutine { continuation ->
-                releaseMedia {
-                    if (continuation.isActive) continuation.resume(Unit)
+            // The GL thread can block inside eglSwapBuffers/eglTerminate on some Samsung drivers.
+            // Without a bound, this load and every later one would wait forever.
+            val released = withTimeoutOrNull(RENDERER_RELEASE_TIMEOUT_MS) {
+                suspendCancellableCoroutine { continuation ->
+                    releaseMedia {
+                        if (continuation.isActive) continuation.resume(Unit)
+                    }
                 }
+            }
+            if (released == null) {
+                Log.e(TAG, "Renderer release timed out; continuing without waiting")
             }
         }
 
@@ -2660,6 +2668,7 @@ class WallpurrWallpaperService : WallpaperService() {
         const val MAX_DECODE_SIDE = 4096
         const val LOW_RAM_MAX_DECODE_SIDE = 2048
         const val TERMINAL_VIDEO_ADVANCE_DELAY_MS = 3_000L
+        const val RENDERER_RELEASE_TIMEOUT_MS = 2_000L
         const val INITIAL_DESTINATION_RECONCILE_MS = 600L
         const val MAX_FIRST_FRAME_RETRIES = 3
         const val FIRST_FRAME_RETRY_DELAY_MS = 80L
