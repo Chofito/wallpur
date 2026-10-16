@@ -1,8 +1,10 @@
 package dev.chofito.wallpurr.ui.settings
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.chofito.wallpurr.R
 import dev.chofito.wallpurr.storage.WallpurrRepository
 import dev.chofito.wallpurr.storage.PowerSavePolicy
 import dev.chofito.wallpurr.wallpaper.RotationNotifier
@@ -67,23 +69,23 @@ class SettingsViewModel(
         }
     }
 
-    fun exportJson(uri: Uri, context: android.content.Context) {
+    fun exportJson(uri: Uri, context: Context) {
         viewModelScope.launch {
             runCatching { repository.exportJson(uri, context) }
-                .onSuccess { message.value = "JSON exportado" }
-                .onFailure { message.value = it.message }
+                .onSuccess { message.value = context.getString(R.string.export_json_done) }
+                .onFailure { message.value = it.userMessage(context, R.string.export_json_failed) }
         }
     }
 
-    fun exportZip(uri: Uri, context: android.content.Context) {
+    fun exportZip(uri: Uri, context: Context) {
         viewModelScope.launch {
             runCatching { repository.exportZip(uri, context) }
-                .onSuccess { message.value = "Zip exportado" }
-                .onFailure { message.value = it.message }
+                .onSuccess { message.value = context.getString(R.string.export_zip_done) }
+                .onFailure { message.value = it.userMessage(context, R.string.export_zip_failed) }
         }
     }
 
-    fun importConfig(uri: Uri, context: android.content.Context) {
+    fun importConfig(uri: Uri, context: Context) {
         viewModelScope.launch {
             runCatching {
                 repository.importConfig(uri, context).also {
@@ -94,16 +96,16 @@ class SettingsViewModel(
             }
                 .onSuccess { result ->
                     message.value = if (result.skippedImages.isEmpty()) {
-                        "Importación lista"
+                        context.getString(R.string.import_done)
                     } else {
-                        "Importado. Faltan ${result.skippedImages.size} imágenes."
+                        context.getString(R.string.import_done_missing, result.skippedImages.size)
                     }
                 }
-                .onFailure { message.value = it.message }
+                .onFailure { message.value = it.userMessage(context, R.string.import_failed) }
         }
     }
 
-    fun resetAllLocalData() {
+    fun resetAllLocalData(context: Context) {
         viewModelScope.launch {
             runCatching {
                 scheduler.cancel()
@@ -111,10 +113,14 @@ class SettingsViewModel(
                 repository.resetAllLocalData()
                 wallpaperPulse.tryEmit(WallpaperPulse.Reload)
             }.onSuccess {
-                message.value = "Wallpurr quedó vacío. Los archivos de tu galería no se tocaron."
+                message.value = context.getString(R.string.developer_reset_done)
             }.onFailure {
-                message.value = it.message
+                message.value = it.userMessage(context, R.string.developer_reset_failed)
             }
         }
     }
 }
+
+/** Failures can carry a null/blank message; never leave the user without feedback. */
+private fun Throwable.userMessage(context: Context, fallbackRes: Int): String =
+    message?.takeIf { it.isNotBlank() } ?: context.getString(fallbackRes)

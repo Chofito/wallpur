@@ -157,4 +157,13 @@
     <string name="developer_reset_confirm_title">¿Borrar todo en Wallpurr?</string>
     <string name="developer_reset_confirm_body">Se vacían la base de datos, la biblioteca y las playlists. Los videos y fotos originales en Galería / Archivos se quedan.</string>
     <string name="developer_reset_confirm">Borrar todo</string>
+    <string name="export_json_done">JSON exportado</string>
+    <string name="export_json_failed">No se pudo exportar el JSON.</string>
+    <string name="export_zip_done">Zip exportado</string>
+    <string name="export_zip_failed">No se pudo exportar el zip.</string>
+    <string name="import_done">Importación lista</string>
+    <string name="import_done_missing">Importado. Faltan %1$d imágenes.</string>
+    <string name="import_failed">No se pudo importar el archivo.</string>
+    <string name="developer_reset_done">Wallpurr quedó vacío. Los archivos de tu galería no se tocaron.</string>
+    <string name="developer_reset_failed">No se pudo borrar los datos de Wallpurr.</string>
 </resources>

@@ -248,7 +248,7 @@ fun SettingsScreen(
                 TextButton(
                     onClick = {
                         confirmReset = false
-                        viewModel.resetAllLocalData()
+                        viewModel.resetAllLocalData(context)
                     },
                 ) {
                     Text(stringResource(R.string.developer_reset_confirm))
