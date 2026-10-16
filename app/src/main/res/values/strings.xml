@@ -171,4 +171,7 @@
     <string name="diagnostics_hint">Guarda un .txt con la versión, el dispositivo, tus ajustes y los registros recientes de Wallpurr. Se genera en tu teléfono y tú decides con quién compartirlo.</string>
     <string name="diagnostics_done">Diagnóstico exportado</string>
     <string name="diagnostics_failed">No se pudo exportar el diagnóstico.</string>
+    <string name="privacy_title">Política de privacidad</string>
+    <string name="privacy_close">Cerrar</string>
+    <string name="privacy_body">Wallpurr funciona sin conexión: no tiene permiso de Internet y no recopila ni comparte ningún dato.\n\nLas imágenes, GIF y videos que importas se copian al almacenamiento privado de la app; tus archivos originales no se modifican. Playlists, ajustes y encuadres se guardan solo en tu dispositivo.\n\nExportar JSON o ZIP guarda un archivo donde tú elijas. Esos archivos no están cifrados: protégelos y compártelos bajo tu responsabilidad.\n\nWallpurr excluye sus medios y su base de datos del respaldo automático de Android y de la transferencia entre dispositivos; al reinstalar o cambiar de teléfono empieza vacía. Usa la exportación ZIP para mover tus datos.\n\nExportar diagnóstico crea un .txt local con la versión de la app, el modelo y la versión de Android, tus ajustes y registros recientes. Solo se genera cuando lo pides y solo se comparte si tú lo envías.\n\nResetear Wallpurr o desinstalar la app elimina todos los datos locales.\n\nContacto: &lt;correo de contacto&gt;</string>
 </resources>

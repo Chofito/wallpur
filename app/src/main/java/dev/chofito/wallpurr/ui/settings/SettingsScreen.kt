@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,6 +64,7 @@ fun SettingsScreen(
     val powerSavePolicy by viewModel.powerSavePolicy.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var confirmReset by remember { mutableStateOf(false) }
+    var showPrivacy by remember { mutableStateOf(false) }
     val exportJson = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri?.let { viewModel.exportJson(it, context) }
     }
@@ -234,6 +236,14 @@ fun SettingsScreen(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
             }
+            Text(stringResource(R.string.privacy_title), style = MaterialTheme.typography.titleLarge)
+            PurrCard(onClick = { showPrivacy = true }) {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.privacy_title)) },
+                    leadingContent = { IconBubble(Icons.Outlined.PrivacyTip) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
             Text(stringResource(R.string.developer_title), style = MaterialTheme.typography.titleLarge)
             PurrCard(onClick = { confirmReset = true }) {
                 ListItem(
@@ -250,6 +260,24 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+
+    if (showPrivacy) {
+        AlertDialog(
+            onDismissRequest = { showPrivacy = false },
+            title = { Text(stringResource(R.string.privacy_title)) },
+            text = {
+                Text(
+                    stringResource(R.string.privacy_body),
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showPrivacy = false }) {
+                    Text(stringResource(R.string.privacy_close))
+                }
+            },
+        )
     }
 
     if (confirmReset) {

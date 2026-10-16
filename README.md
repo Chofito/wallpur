@@ -147,3 +147,9 @@ Wallpurr es software libre: puedes redistribuirlo y/o modificarlo bajo los térm
 
 Wallpurr se distribuye con la esperanza de que sea útil, pero SIN NINGUNA GARANTÍA. Consulta [LICENSE](LICENSE) para el texto completo.
 
+
+## Política de privacidad
+
+El texto está en [docs/PRIVACY.md](docs/PRIVACY.md) y dentro de la app (Ajustes > Política de privacidad).
+
+> **TODO (publicación en Google Play):** Play exige una URL pública a esta política. Hay que alojarla en un sitio web (por ejemplo, páginas estáticas), reemplazar `<correo de contacto>` en `docs/PRIVACY.md` y en `privacy_body` de `strings.xml`, y declarar la URL en Play Console.
