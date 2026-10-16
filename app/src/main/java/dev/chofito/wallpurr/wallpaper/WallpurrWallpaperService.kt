@@ -119,6 +119,11 @@ class WallpurrWallpaperService : WallpaperService() {
         private val transitionSourceRect = Rect()
         private val transitionDestinationRect = Rect()
         private val transitionInterpolator = AccelerateDecelerateInterpolator()
+        private val maxDecodeSide by lazy(LazyThreadSafetyMode.NONE) {
+            val lowRam = applicationContext.getSystemService(ActivityManager::class.java)
+                ?.isLowRamDevice == true
+            if (lowRam) LOW_RAM_MAX_DECODE_SIDE else MAX_DECODE_SIDE
+        }
         private val canvasTransitionMaxSide by lazy(LazyThreadSafetyMode.NONE) {
             val lowRam = applicationContext.getSystemService(ActivityManager::class.java)
                 ?.isLowRamDevice == true
@@ -1207,10 +1212,13 @@ class WallpurrWallpaperService : WallpaperService() {
                 transform = imageTransform,
                 minimumSide = MIN_BITMAP_DECODE_SIDE,
             )
+            // A strong zoom on a very large original would otherwise request a bitmap of hundreds
+            // of MB and could exceed the GPU's maximum texture size once uploaded to EGL.
+            val bounded = minOf(qualityTarget, maxDecodeSide)
             return if (needsSoftwareBlur) {
-                minOf(qualityTarget, SOFTWARE_BLUR_DECODE_SIDE)
+                minOf(bounded, SOFTWARE_BLUR_DECODE_SIDE)
             } else {
-                qualityTarget
+                bounded
             }
         }
 
@@ -2648,6 +2656,9 @@ class WallpurrWallpaperService : WallpaperService() {
         const val VIDEO_RETRY_DELAY_MS = 200L
         const val MIN_BITMAP_DECODE_SIDE = 1080
         const val SOFTWARE_BLUR_DECODE_SIDE = 1600
+        // 4096 px keeps a 4:3 ARGB bitmap under ~48 MB and below every current GPU texture limit.
+        const val MAX_DECODE_SIDE = 4096
+        const val LOW_RAM_MAX_DECODE_SIDE = 2048
         const val TERMINAL_VIDEO_ADVANCE_DELAY_MS = 3_000L
         const val INITIAL_DESTINATION_RECONCILE_MS = 600L
         const val MAX_FIRST_FRAME_RETRIES = 3
