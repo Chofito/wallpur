@@ -34,6 +34,7 @@ class ShareImportViewModel(
             } finally {
                 _importing.value = false
             }
+            _importedIds.value?.let { repository.warmThumbnails(it) }
         }
     }
 

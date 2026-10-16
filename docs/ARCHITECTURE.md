@@ -452,8 +452,9 @@ El switch configura la política; no intenta activar el modo de ahorro del siste
 
 - Decode de wallpaper basado en `requiredDecodeMaxSide`.
 - Miniaturas derivadas de 480 px en `cacheDir` (96 MB máximo), compartidas por biblioteca,
-  tarjetas y playlists. Sólo se generan para elementos visibles, con dos generadores simultáneos;
-  los trabajos aún no terminados se cancelan durante un fling y se retoman al asentarse el scroll.
+  tarjetas y playlists. Se pre-generan al importar y en un backfill al abrir la biblioteca; las
+  tiles leen las existentes incluso durante un fling y solo posponen generar las que faltan hasta
+  que el scroll se asienta. Dos generadores simultáneos; el backfill usa uno a la vez.
 - Renders estáticos finales en PNG sin pérdida (256 MB máximo), reutilizables por orientación,
   viewport, transform y estilo de bloqueo.
 - Backdrop limitado a 720 px y retenido solo mientras aplica.

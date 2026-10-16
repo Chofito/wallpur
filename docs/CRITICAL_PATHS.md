@@ -419,7 +419,13 @@ Un player por tile visible es caro. La estrategia actual:
 - apagar players durante scroll;
 - esperar 220 ms después de asentarse;
 - limitar videos y GIFs en conjunto: dos en teléfono y uno en tablet;
-- no iniciar ni terminar el encode de miniaturas nuevas durante un fling;
+- leer miniaturas existentes siempre, también durante un fling; solo se pospone *generar* las que
+  faltan (decodificar el original) hasta que el scroll se asienta;
+- nunca usar el estado de scroll como key de los efectos de cada tile: cancelaría y reiniciaría el
+  trabajo de todas las tiles visibles en cada inicio/fin de scroll;
+- miniaturas pre-generadas al importar y en un backfill al abrir la biblioteca (hasta 1000, una a la
+  vez), para que las grids casi nunca decodifiquen originales;
+- mapa en memoria de miniaturas resueltas (`peekThumbnail`) para dibujar en el primer frame;
 - miniatura persistente acotada en disco y cache de memoria de Coil;
 - liberar player en `onDispose`/`onRelease`.
 

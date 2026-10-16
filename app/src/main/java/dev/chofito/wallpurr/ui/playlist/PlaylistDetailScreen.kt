@@ -79,6 +79,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import dev.chofito.wallpurr.R
 import dev.chofito.wallpurr.playlist.WallpaperTarget
+import dev.chofito.wallpurr.storage.MediaDerivativeCache
 import dev.chofito.wallpurr.storage.MediaKind
 import dev.chofito.wallpurr.storage.LockStyle
 import dev.chofito.wallpurr.storage.db.ImageAssetEntity
@@ -147,6 +148,7 @@ fun PlaylistDetailScreen(
     }
     val cover = images.firstOrNull()
     val isScrolling = gridState.isScrollInProgress
+    val thumbnailGenerationAllowed = remember(gridState) { { !gridState.isScrollInProgress } }
     val effectiveLockBlur = (
         cover?.takeIf { it.lockStyleOverride }?.lockBlurRadius ?: lockBlurDraft
     ).coerceIn(0, LockStyle.MAX_BLUR_RADIUS)
@@ -290,7 +292,7 @@ fun PlaylistDetailScreen(
                     mode = mode,
                     selected = image.id in selected,
                     active = image.id in activeMediaIds,
-                    thumbnailLoadingEnabled = !isScrolling,
+                    thumbnailGenerationAllowed = thumbnailGenerationAllowed,
                     modifier = Modifier
                         .then(if (mode == PhotoMode.Reorder) Modifier else Modifier.animateItem())
                         .gridReorderItem(
@@ -391,7 +393,11 @@ private fun DestinationPicker(
 ) {
     val coverFile = cover?.let { File(filesDir, "images/${it.storedName}") }
     val coverThumbnail = if (cover != null && coverFile != null) {
-        rememberMediaThumbnailFile(cover, coverFile, maxSide = 480)
+        rememberMediaThumbnailFile(
+            cover,
+            coverFile,
+            maxSide = MediaDerivativeCache.GRID_THUMBNAIL_SIDE,
+        )
     } else {
         null
     }

@@ -31,6 +31,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,9 +52,11 @@ import coil3.compose.AsyncImage
 import dev.chofito.wallpurr.R
 import dev.chofito.wallpurr.WallpurrApplication
 import dev.chofito.wallpurr.playlist.WallpaperTarget
+import dev.chofito.wallpurr.storage.MediaDerivativeCache
 import dev.chofito.wallpurr.storage.MediaKind
 import dev.chofito.wallpurr.storage.db.ImageAssetEntity
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 import java.io.File
 
 @Composable
@@ -91,19 +95,18 @@ fun ImageThumb(
     modifier: Modifier = Modifier,
     framed: Boolean = true,
     active: Boolean = false,
-    thumbnailLoadingEnabled: Boolean = true,
+    thumbnailGenerationAllowed: () -> Boolean = { true },
 ) {
     val file = File(filesDir, "images/${image.storedName}")
     val kind = MediaKind.from(image.mediaType)
     val shape = RoundedCornerShape(if (framed) 20.dp else 14.dp)
     // One shared size avoids creating separate disk entries for library tiles, playlist cards,
     // and the three-image playlist preview.
-    val thumbnailSide = 480
     val thumbnail = rememberMediaThumbnailFile(
         image = image,
         file = file,
-        maxSide = thumbnailSide,
-        loadingEnabled = thumbnailLoadingEnabled,
+        maxSide = MediaDerivativeCache.GRID_THUMBNAIL_SIDE,
+        generationAllowed = thumbnailGenerationAllowed,
     )
     Box(
         modifier
@@ -147,23 +150,36 @@ fun rememberMediaThumbnailFile(
     image: ImageAssetEntity,
     file: File,
     maxSide: Int,
-    loadingEnabled: Boolean = true,
+    generationAllowed: () -> Boolean = { true },
 ): File? {
     val application = LocalContext.current.applicationContext as? WallpurrApplication
+    val cache = application?.container?.mediaCache
     // App-owned originals are immutable. Entity metadata is therefore a stable composition key
     // and avoids repeated filesystem stat calls for every visible tile during recomposition.
     val sourceFingerprint = "${image.id}:${image.storedName}:${image.addedAt}"
     val kind = MediaKind.from(image.mediaType)
-    var thumbnail by remember(sourceFingerprint, kind, maxSide) { mutableStateOf<File?>(null) }
-    LaunchedEffect(sourceFingerprint, kind, maxSide, loadingEnabled) {
-        if (loadingEnabled && thumbnail == null) {
-            thumbnail = try {
-                application?.container?.mediaCache?.thumbnail(file, kind, maxSide)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                null
-            }
+    // A tile already resolved in this process draws on its first frame, with no async hop.
+    var thumbnail by remember(sourceFingerprint, kind, maxSide) {
+        mutableStateOf(cache?.peekThumbnail(image.storedName, kind, maxSide))
+    }
+    val currentGenerationAllowed by rememberUpdatedState(generationAllowed)
+    // Deliberately not keyed on scroll state: starting or stopping a scroll must not cancel and
+    // restart the work of every visible tile.
+    LaunchedEffect(sourceFingerprint, kind, maxSide) {
+        if (thumbnail != null || cache == null) return@LaunchedEffect
+        thumbnail = try {
+            // Reading an existing thumbnail is cheap and always allowed, even mid-fling.
+            cache.thumbnail(file, kind, maxSide, generate = false)
+                ?: run {
+                    // Decoding the original is the expensive part; defer it until the grid
+                    // settles. Tiles that scroll away first are disposed and never generate.
+                    snapshotFlow { currentGenerationAllowed() }.first { it }
+                    cache.thumbnail(file, kind, maxSide)
+                }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
         }
     }
     return thumbnail

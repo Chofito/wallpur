@@ -192,6 +192,23 @@ class WallpurrRepository(
         return imported
     }
 
+    /**
+     * Pre-generates grid thumbnails for [ids], or for the most recent library items when null.
+     * Grids then only read small cached files instead of decoding originals while scrolling.
+     */
+    suspend fun warmThumbnails(ids: List<String>? = null) {
+        val images = if (ids == null) {
+            db.images().observeAll().first()
+        } else {
+            db.images().getMany(ids)
+        }
+        mediaCache.warmThumbnails(
+            images
+                .filter { files.isValidStoredName(it.storedName) }
+                .map { files.file(it.storedName) to MediaKind.from(it.mediaType) },
+        )
+    }
+
     suspend fun deleteImage(id: String) {
         val image = db.images().get(id) ?: return
         // Row first: a row without its file would surface as broken media, whereas an orphan file

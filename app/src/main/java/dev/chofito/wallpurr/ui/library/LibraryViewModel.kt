@@ -34,10 +34,16 @@ class LibraryViewModel(
 
     init {
         viewModelScope.launch { _rootFolderId.value = repository.libraryFolderId() }
+        // Backfills thumbnails for libraries imported before they were generated at import time,
+        // or after Android cleared the cache. Existing entries are skipped with a cheap lookup.
+        viewModelScope.launch { repository.warmThumbnails() }
     }
 
     fun import(uris: List<Uri>, folderId: String? = null) {
-        viewModelScope.launch { repository.importImages(uris, folderId) }
+        viewModelScope.launch {
+            val ids = repository.importImages(uris, folderId)
+            repository.warmThumbnails(ids)
+        }
     }
 
     fun delete(ids: List<String>) {

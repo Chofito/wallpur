@@ -109,7 +109,9 @@ fun LibraryScreen(
     var folderName by remember { mutableStateOf("") }
     var confirmFolderDelete by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
-    val isScrolling = gridState.isScrollInProgress
+    // Read lazily by each tile's effect. Reading isScrollInProgress here would recompose the whole
+    // screen every time a scroll starts or stops.
+    val thumbnailGenerationAllowed = remember(gridState) { { !gridState.isScrollInProgress } }
 
     LaunchedEffect(currentFolderId, rootFolderId, folders) {
         if (currentFolderId != null && rootFolderId != null && currentFolder == null) {
@@ -453,7 +455,7 @@ fun LibraryScreen(
                     mode = mode,
                     selected = image.id in selected,
                     active = image.id in activeIds,
-                    thumbnailLoadingEnabled = !isScrolling,
+                    thumbnailGenerationAllowed = thumbnailGenerationAllowed,
                     modifier = Modifier.animateItem(),
                     onClick = {
                         when (mode) {

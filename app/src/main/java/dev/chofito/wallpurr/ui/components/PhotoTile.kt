@@ -35,7 +35,7 @@ fun PhotoTile(
     selected: Boolean,
     modifier: Modifier = Modifier,
     active: Boolean = false,
-    thumbnailLoadingEnabled: Boolean = true,
+    thumbnailGenerationAllowed: () -> Boolean = { true },
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     overlay: @Composable BoxScope.() -> Unit = {},
@@ -50,7 +50,7 @@ fun PhotoTile(
             image = image,
             filesDir = filesDir,
             active = active && mode == PhotoMode.Browse,
-            thumbnailLoadingEnabled = thumbnailLoadingEnabled,
+            thumbnailGenerationAllowed = thumbnailGenerationAllowed,
         )
         if (mode == PhotoMode.Select) {
             Box(
