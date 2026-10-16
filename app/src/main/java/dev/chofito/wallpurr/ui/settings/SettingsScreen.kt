@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BatteryAlert
 import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Upload
@@ -67,6 +68,9 @@ fun SettingsScreen(
     }
     val exportZip = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let { viewModel.exportZip(it, context) }
+    }
+    val exportDiagnostics = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        uri?.let { viewModel.exportDiagnostics(it, context) }
     }
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { viewModel.importConfig(it, context) }
@@ -218,6 +222,15 @@ fun SettingsScreen(
                             contentColor = MaterialTheme.colorScheme.secondary,
                         )
                     },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
+            Text(stringResource(R.string.diagnostics_title), style = MaterialTheme.typography.titleLarge)
+            PurrCard(onClick = { exportDiagnostics.launch("wallpurr-diagnostico.txt") }) {
+                ListItem(
+                    headlineContent = { Text(stringResource(R.string.diagnostics_action)) },
+                    supportingContent = { Text(stringResource(R.string.diagnostics_hint)) },
+                    leadingContent = { IconBubble(Icons.Outlined.BugReport) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
             }

@@ -9,13 +9,16 @@ import dev.chofito.wallpurr.storage.WallpurrRepository
 import dev.chofito.wallpurr.storage.PowerSavePolicy
 import dev.chofito.wallpurr.wallpaper.RotationNotifier
 import dev.chofito.wallpurr.wallpaper.RotationController
+import dev.chofito.wallpurr.wallpaper.WallpaperApplier
 import dev.chofito.wallpurr.wallpaper.WallpaperPulse
 import dev.chofito.wallpurr.wallpaper.WallpaperScheduler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SettingsViewModel(
     private val repository: WallpurrRepository,
@@ -23,6 +26,7 @@ class SettingsViewModel(
     private val notifier: RotationNotifier,
     private val wallpaperPulse: MutableSharedFlow<WallpaperPulse>,
     private val rotation: RotationController,
+    private val applier: WallpaperApplier,
 ) : ViewModel() {
     val message = MutableStateFlow<String?>(null)
     val pauseGifHidden = repository.observeFlag(WallpurrRepository.KEY_PAUSE_GIF_HIDDEN, true)
@@ -82,6 +86,20 @@ class SettingsViewModel(
             runCatching { repository.exportZip(uri, context) }
                 .onSuccess { message.value = context.getString(R.string.export_zip_done) }
                 .onFailure { message.value = it.userMessage(context, R.string.export_zip_failed) }
+        }
+    }
+
+    fun exportDiagnostics(uri: Uri, context: Context) {
+        viewModelScope.launch {
+            runCatching {
+                val report = DiagnosticsReport(context.applicationContext, repository, applier)
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.use { report.write(it) }
+                        ?: error("openOutputStream returned null")
+                }
+            }
+                .onSuccess { message.value = context.getString(R.string.diagnostics_done) }
+                .onFailure { message.value = it.userMessage(context, R.string.diagnostics_failed) }
         }
     }
 

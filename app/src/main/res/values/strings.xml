@@ -166,4 +166,9 @@
     <string name="import_failed">No se pudo importar el archivo.</string>
     <string name="developer_reset_done">Wallpurr quedó vacío. Los archivos de tu galería no se tocaron.</string>
     <string name="developer_reset_failed">No se pudo borrar los datos de Wallpurr.</string>
+    <string name="diagnostics_title">Diagnóstico</string>
+    <string name="diagnostics_action">Exportar diagnóstico</string>
+    <string name="diagnostics_hint">Guarda un .txt con la versión, el dispositivo, tus ajustes y los registros recientes de Wallpurr. Se genera en tu teléfono y tú decides con quién compartirlo.</string>
+    <string name="diagnostics_done">Diagnóstico exportado</string>
+    <string name="diagnostics_failed">No se pudo exportar el diagnóstico.</string>
 </resources>

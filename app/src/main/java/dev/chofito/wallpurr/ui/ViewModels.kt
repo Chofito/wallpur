@@ -100,6 +100,7 @@ fun settingsViewModel(): SettingsViewModel {
                     container.notifier,
                     container.wallpaperPulse,
                     container.rotation,
+                    container.applier,
                 )
             }
         },
