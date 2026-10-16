@@ -152,6 +152,13 @@ class WallpurrRepository(
         db.folders().upsert(existing.copy(name = name.trim().ifEmpty { existing.name }))
     }
 
+    suspend fun setFolderHidden(id: String, hidden: Boolean) {
+        // The library root holds unfiled media; hiding it would hide the whole library.
+        if (id == libraryFolderId()) return
+        val existing = db.folders().get(id) ?: return
+        db.folders().update(existing.copy(hidden = hidden))
+    }
+
     suspend fun deleteFolder(id: String) {
         val rootId = libraryFolderId()
         if (id == rootId) return
@@ -288,6 +295,11 @@ class WallpurrRepository(
                 },
             )
         }
+    }
+
+    suspend fun setPlaylistHidden(id: String, hidden: Boolean) {
+        val existing = db.playlists().get(id) ?: return
+        db.playlists().update(existing.copy(hidden = hidden))
     }
 
     suspend fun deletePlaylist(id: String) {
@@ -749,8 +761,8 @@ private fun ShuffleState.toEntity(playlistId: String) = ShuffleCursorEntity(
     currentImageId = currentImageId,
 )
 
-private fun FolderEntity.toDto() = FolderDto(id, name, createdAt)
-private fun FolderDto.toEntity() = FolderEntity(id, name, createdAt)
+private fun FolderEntity.toDto() = FolderDto(id, name, createdAt, hidden)
+private fun FolderDto.toEntity() = FolderEntity(id, name, createdAt, hidden)
 private fun ImageAssetEntity.toDto(transforms: List<ImageTransformEntity>) = ImageDto(
     id = id,
     folderId = folderId,
@@ -807,6 +819,7 @@ private fun PlaylistEntity.toDto(imageIds: List<String>) =
         imageIds = imageIds,
         lockBlurRadius = lockBlurRadius,
         lockOpacity = lockOpacity,
+        hidden = hidden,
     )
 private fun PlaylistDto.toEntity() = PlaylistEntity(
     id = id,
@@ -816,4 +829,5 @@ private fun PlaylistDto.toEntity() = PlaylistEntity(
     createdAt = createdAt,
     lockBlurRadius = lockBlurRadius,
     lockOpacity = lockOpacity,
+    hidden = hidden,
 )

@@ -1,5 +1,6 @@
 package dev.chofito.wallpurr.storage.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -10,6 +11,8 @@ data class FolderEntity(
     @PrimaryKey val id: String,
     val name: String,
     val createdAt: Long,
+    // Hidden folders and playlists only appear after the user reveals hidden content.
+    @ColumnInfo(defaultValue = "0") val hidden: Boolean = false,
 )
 
 @Entity(
@@ -76,6 +79,7 @@ data class PlaylistEntity(
     val createdAt: Long,
     val lockBlurRadius: Int = 0,
     val lockOpacity: Float = 1f,
+    @ColumnInfo(defaultValue = "0") val hidden: Boolean = false,
 )
 
 @Entity(

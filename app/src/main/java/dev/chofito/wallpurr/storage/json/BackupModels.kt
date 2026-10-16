@@ -16,6 +16,7 @@ data class FolderDto(
     val id: String,
     val name: String,
     val createdAt: Long,
+    val hidden: Boolean = false,
 )
 
 @Serializable
@@ -60,4 +61,5 @@ data class PlaylistDto(
     val imageIds: List<String> = emptyList(),
     val lockBlurRadius: Int = 0,
     val lockOpacity: Float = 1f,
+    val hidden: Boolean = false,
 )
