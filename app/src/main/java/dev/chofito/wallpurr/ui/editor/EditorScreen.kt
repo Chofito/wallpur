@@ -172,6 +172,12 @@ fun EditorScreen(
             )
         },
     ) { padding ->
+        if (state.loadFailed) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.editor_load_error))
+            }
+            return@Scaffold
+        }
         CompositionLocalProvider(LocalOverscrollFactory provides null) {
             Column(
                 Modifier

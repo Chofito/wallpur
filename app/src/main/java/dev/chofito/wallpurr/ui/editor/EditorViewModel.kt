@@ -16,6 +16,7 @@ import dev.chofito.wallpurr.storage.VideoPlayMode
 import dev.chofito.wallpurr.storage.WallpurrRepository
 import dev.chofito.wallpurr.wallpaper.RotationController
 import dev.chofito.wallpurr.wallpaper.createBlurredContainBackdrop
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -42,6 +43,7 @@ data class EditorUiState(
     val inheritedLockBlurRadius: Int = 0,
     val inheritedLockOpacity: Float = 1f,
     val hasPlaylistContext: Boolean = false,
+    val loadFailed: Boolean = false,
 )
 
 class EditorViewModel(
@@ -74,8 +76,14 @@ class EditorViewModel(
             val transforms = repository.getTransforms(imageId)
             portrait = transforms[ScreenOrientation.PORTRAIT] ?: ImageTransform.Default
             landscape = transforms[ScreenOrientation.LANDSCAPE] ?: ImageTransform.Default
-            val bmp = withContext(Dispatchers.Default) {
-                repository.decodeBitmap(image, 2048)
+            // A corrupt file must not crash the app; `loaded` stays false so nothing is saved.
+            val bmp = try {
+                withContext(Dispatchers.Default) { repository.decodeBitmap(image, 2048) }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                state.update { it.copy(loadFailed = true) }
+                return@launch
             }
             val (palette, backdrop) = withContext(Dispatchers.Default) {
                 extractPalette(bmp) to runCatching {

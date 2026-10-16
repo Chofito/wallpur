@@ -133,6 +133,7 @@
     <string name="use_wallpaper_now">Usar este fondo ahora</string>
     <string name="current_wallpaper">Fondo seleccionado en esta playlist</string>
     <string name="edit_image">Editar recorte</string>
+    <string name="editor_load_error">No se pudo abrir esta imagen. Puede estar dañada.</string>
     <string name="notif_channel">Rotación</string>
     <string name="notif_channel_desc">Controles para cambiar el fondo actual.</string>
     <string name="notification_settings_title">Notificación en pantalla de bloqueo</string>
