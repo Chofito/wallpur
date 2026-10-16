@@ -21,7 +21,7 @@ flowchart TD
     Activity["MainActivity / intents compartidos"] --> UI["Compose UI"]
     UI --> VM["ViewModels"]
     VM --> Repo["WallpurrRepository"]
-    Repo --> Room["Room v4"]
+    Repo --> Room["Room v5"]
     Repo --> Files["filesDir/images"]
     Repo --> Backup["JSON / ZIP"]
     VM --> Rotation["RotationController"]
@@ -84,14 +84,14 @@ Al importar:
 
 La app usa la copia después de importar; no depende de que el URI original siga disponible.
 
-### Room v4
+### Room v5
 
 | Tabla | Propósito |
 | --- | --- |
-| `folders` | Biblioteca raíz y carpetas creadas por el usuario |
+| `folders` | Biblioteca raíz y carpetas creadas por el usuario; marca `hidden` |
 | `images` | Metadata del medio y configuración de video/lock propia |
 | `transforms` | Perfil por `imageId + orientation` |
-| `playlists` | Nombre, intervalo, destino y estilo de lock base |
+| `playlists` | Nombre, intervalo, destino, estilo de lock base y marca `hidden` |
 | `playlist_items` | Relación y `sortOrder` |
 | `shuffle_cursors` | Elemento actual, historial y pendientes |
 | `settings` | Estado global y flags simples |
@@ -115,6 +115,7 @@ Settings globales principales:
 - permiso lógico para video en lockscreen;
 - cambio por tap en Home;
 - política de ahorro;
+- política para volver a ocultar el contenido oculto;
 - 2–4 columnas de biblioteca.
 
 ### Repository
@@ -131,6 +132,15 @@ Settings globales principales:
 - backups.
 
 No guarda objetos de UI ni referencias a `Surface`/`Bitmap` de runtime.
+
+### Contenido oculto
+
+- `HiddenContentGate` (en `AppContainer`) guarda en memoria si lo oculto está revelado. Nunca se persiste: un arranque en frío empieza oculto.
+- Los flows `folders`, `playlists` e `images` del repository filtran lo oculto, así que todas las pantallas y selectores respetan el estado sin lógica propia. El contenido de una playlist visible no se filtra: muestra lo que el fondo va a mostrar, y una lista parcial rompería el reordenamiento.
+- Se revela con pulsación larga en el título de Biblioteca o Playlists y `BiometricPrompt` (biometría débil o credencial del dispositivo; en Android 9, `createConfirmDeviceCredentialIntent`). Sin bloqueo de pantalla basta el gesto.
+- `MainActivity.onStop` (sin contar la recreación por rotación) aplica la política: al salir, tras N minutos o manual. Al ocultarse, la navegación vuelve a las pestañas. En Android 13+ se desactiva la captura de Recientes mientras está revelado.
+- La notificación usa "Wallpurr" en vez del nombre de una playlist oculta.
+- Es discreción, no seguridad: los archivos no se cifran, los respaldos los incluyen y el fondo muestra la playlist activa aunque esté oculta.
 
 ### Backups
 
