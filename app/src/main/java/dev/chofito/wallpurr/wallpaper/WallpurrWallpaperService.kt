@@ -65,6 +65,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.coroutines.resume
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 
 class WallpurrWallpaperService : WallpaperService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -168,8 +169,13 @@ class WallpurrWallpaperService : WallpaperService() {
         private var rendererReleasesInFlight = 0
         private val rendererReleaseWaiters = mutableListOf<() -> Unit>()
         private var screenStateReceiverRegistered = false
+        private var sharedLockStyleVisible = false
         private val redrawForScreenState = Runnable {
             if (surfaceReady && allowCanvas) drawFrame()
+        }
+        private val reconcileSharedLockState = Runnable {
+            val keyguard = applicationContext.getSystemService(KeyguardManager::class.java)
+            setSharedLockStyleVisible(keyguard?.isKeyguardLocked == true)
         }
         private val retryFirstFrame = Runnable {
             if (surfaceReady && allowCanvas) drawFrame()
@@ -211,8 +217,32 @@ class WallpurrWallpaperService : WallpaperService() {
         private val screenStateReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 handler.removeCallbacks(redrawForScreenState)
-                val delay = if (intent?.action == Intent.ACTION_SCREEN_OFF) 150L else 0L
-                handler.postDelayed(redrawForScreenState, delay)
+                handler.removeCallbacks(reconcileSharedLockState)
+                when (intent?.action) {
+                    Intent.ACTION_SCREEN_OFF -> {
+                        // KeyguardManager can still report the previous unlocked state while the
+                        // display is turning off. Treat SCREEN_OFF as the start of lock rendering.
+                        sharedLockStyleVisible = true
+                        handler.postDelayed(redrawForScreenState, SCREEN_OFF_REDRAW_DELAY_MS)
+                    }
+                    Intent.ACTION_SCREEN_ON -> {
+                        val keyguard = applicationContext
+                            .getSystemService(KeyguardManager::class.java)
+                        if (keyguard?.isKeyguardLocked == true) {
+                            sharedLockStyleVisible = true
+                        }
+                        handler.post(redrawForScreenState)
+                        // Reconcile after Samsung finishes its keyguard transition. USER_PRESENT
+                        // normally clears it sooner; this also covers devices without a secure lock.
+                        handler.postDelayed(
+                            reconcileSharedLockState,
+                            KEYGUARD_RECONCILE_DELAY_MS,
+                        )
+                    }
+                    Intent.ACTION_USER_PRESENT -> {
+                        setSharedLockStyleVisible(false)
+                    }
+                }
             }
         }
         private val gifCallback = object : Drawable.Callback {
@@ -230,6 +260,9 @@ class WallpurrWallpaperService : WallpaperService() {
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
             registerEngine(this)
+            sharedLockStyleVisible = applicationContext
+                .getSystemService(KeyguardManager::class.java)
+                ?.isKeyguardLocked == true
             registerScreenStateReceiver()
             setTouchEventsEnabled(true)
             scope.launch {
@@ -246,6 +279,7 @@ class WallpurrWallpaperService : WallpaperService() {
             desiredOrientation = null
             orientationReloadScheduled = false
             handler.removeCallbacks(reloadForOrientation)
+            handler.removeCallbacks(reconcileSharedLockState)
             clearCanvasTransition()
             unregisterEngine(this)
             unregisterScreenStateReceiver()
@@ -385,6 +419,12 @@ class WallpurrWallpaperService : WallpaperService() {
         override fun onVisibilityChanged(isVisible: Boolean) {
             super.onVisibilityChanged(isVisible)
             visible = isVisible
+            if (isVisible && applicationContext
+                    .getSystemService(KeyguardManager::class.java)
+                    ?.isKeyguardLocked == true
+            ) {
+                sharedLockStyleVisible = true
+            }
             videoRenderer?.setTransitionsEnabled(transitionsAllowed())
             if (!isVisible && !isPreview) clearCanvasTransition()
             scope.launch {
@@ -1721,8 +1761,13 @@ class WallpurrWallpaperService : WallpaperService() {
                 return LockStyle.None
             }
             if (isLockOnlyEngine()) return lockStyle
-            val keyguard = applicationContext.getSystemService(KeyguardManager::class.java)
-            return if (keyguard?.isKeyguardLocked == true) lockStyle else LockStyle.None
+            return if (sharedLockStyleVisible) lockStyle else LockStyle.None
+        }
+
+        private fun setSharedLockStyleVisible(show: Boolean) {
+            if (sharedLockStyleVisible == show) return
+            sharedLockStyleVisible = show
+            if (surfaceReady && allowCanvas) drawFrame()
         }
 
         private fun registerScreenStateReceiver() {
@@ -1752,6 +1797,7 @@ class WallpurrWallpaperService : WallpaperService() {
 
         private fun unregisterScreenStateReceiver() {
             handler.removeCallbacks(redrawForScreenState)
+            handler.removeCallbacks(reconcileSharedLockState)
             if (!screenStateReceiverRegistered) return
             screenStateReceiverRegistered = false
             runCatching { applicationContext.unregisterReceiver(screenStateReceiver) }
@@ -2434,6 +2480,8 @@ class WallpurrWallpaperService : WallpaperService() {
         const val ORIENTATION_RELOAD_DEBOUNCE_MS = 48L
         const val CANVAS_SURFACE_ORIENTATION_WAIT_MS = 500L
         const val CANVAS_SURFACE_ORIENTATION_RETRY_MS = 32L
+        const val SCREEN_OFF_REDRAW_DELAY_MS = 96L
+        const val KEYGUARD_RECONCILE_DELAY_MS = 320L
     }
 }
 
@@ -2479,16 +2527,19 @@ private class HardwareBlurCache {
         cacheFrame: Boolean,
         drawMedia: (Canvas) -> Boolean,
     ): Boolean {
-        // RenderEffect now works at the exact wallpaper Surface size. The cached RenderNode keeps
-        // still-image redraws cheap while avoiding low-resolution upscaling artifacts on tablets.
-        val renderWidth = canvas.width.coerceAtLeast(1)
-        val renderHeight = canvas.height.coerceAtLeast(1)
+        // Strong blur removes high-frequency detail before the final image reaches the Surface.
+        // Render those expensive levels on a conservative intermediate and scale the already
+        // blurred result with filtering. Unlike the old low-resolution bitmap path, media is
+        // composed directly into this GPU node and full-resolution dithering is applied afterward.
+        val renderScale = renderScaleFor(blurLevel)
+        val renderWidth = (canvas.width * renderScale).roundToInt().coerceAtLeast(1)
+        val renderHeight = (canvas.height * renderScale).roundToInt().coerceAtLeast(1)
         val nextKey = source?.let {
             Key(it, canvas.width, canvas.height, transform, blurLevel, radiusPx)
         }
         val cached = node
         if (cacheFrame && cached != null && key == nextKey) {
-            canvas.drawRenderNode(cached)
+            drawBlurNode(canvas, cached, renderWidth, renderHeight)
             drawColorDither(canvas)
             return true
         }
@@ -2496,7 +2547,8 @@ private class HardwareBlurCache {
         clear()
         val nextNode = RenderNode("WallpurrLockStyle")
         nextNode.setPosition(0, 0, renderWidth, renderHeight)
-        val blurRadius = radiusPx
+        nextNode.setUseCompositingLayer(true, null)
+        val blurRadius = (radiusPx * renderScale)
             .coerceAtLeast(MIN_HARDWARE_BLUR_RADIUS_PX)
         nextNode.setRenderEffect(
             RenderEffect.createBlurEffect(
@@ -2515,7 +2567,7 @@ private class HardwareBlurCache {
             nextNode.discardDisplayList()
             return false
         }
-        canvas.drawRenderNode(nextNode)
+        drawBlurNode(canvas, nextNode, renderWidth, renderHeight)
         drawColorDither(canvas)
         if (cacheFrame) {
             node = nextNode
@@ -2527,9 +2579,29 @@ private class HardwareBlurCache {
         return true
     }
 
+    private fun drawBlurNode(
+        canvas: Canvas,
+        blurNode: RenderNode,
+        renderWidth: Int,
+        renderHeight: Int,
+    ) {
+        val saved = canvas.save()
+        try {
+            canvas.scale(
+                canvas.width.toFloat() / renderWidth.coerceAtLeast(1),
+                canvas.height.toFloat() / renderHeight.coerceAtLeast(1),
+            )
+            canvas.drawRenderNode(blurNode)
+        } finally {
+            canvas.restoreToCount(saved)
+        }
+    }
+
     /**
-     * Adds approximately one least-significant color step of high-frequency noise. Its local mean
-     * is neutral, so it breaks 8-bit gradient bands without looking like grain or shifting color.
+     * Adds a neutral high-frequency pattern after the full-resolution blur. The stronger two-tone
+     * signal is intentional: Samsung's lock-screen display pipeline can quantize away the subtler
+     * variant even though it remains visible in screenshots. Soft-light blending keeps the average
+     * luminance neutral while giving the physical panel enough variation to break color bands.
      */
     private fun drawColorDither(canvas: Canvas) {
         canvas.drawRect(
@@ -2549,33 +2621,26 @@ private class HardwareBlurCache {
 
     private companion object {
         const val MIN_HARDWARE_BLUR_RADIUS_PX = 0.5f
-        const val COLOR_DITHER_SIZE = 128
-        const val COLOR_DITHER_ALPHA = 8
+        const val MEDIUM_BLUR_RENDER_SCALE = 0.82f
+        const val STRONG_BLUR_RENDER_SCALE = 0.67f
+        const val FULL_RESOLUTION_BLUR_LEVEL = 10
+        const val MEDIUM_RESOLUTION_BLUR_LEVEL = 15
+        const val COLOR_DITHER_SIZE = 64
+        const val COLOR_DITHER_ALPHA = 12
+
+        fun renderScaleFor(blurLevel: Int): Float = when {
+            blurLevel <= FULL_RESOLUTION_BLUR_LEVEL -> 1f
+            blurLevel <= MEDIUM_RESOLUTION_BLUR_LEVEL -> MEDIUM_BLUR_RENDER_SCALE
+            else -> STRONG_BLUR_RENDER_SCALE
+        }
 
         val COLOR_DITHER_TEXTURE: Bitmap by lazy {
             var state = 0x13579BDF
-            val raw = FloatArray(COLOR_DITHER_SIZE * COLOR_DITHER_SIZE) {
+            val pixels = IntArray(COLOR_DITHER_SIZE * COLOR_DITHER_SIZE) {
                 state = state xor (state shl 13)
                 state = state xor (state ushr 17)
                 state = state xor (state shl 5)
-                ((state ushr 8) and 0xFFFF) / 65535f
-            }
-            fun sample(x: Int, y: Int): Float {
-                val wrappedX = (x + COLOR_DITHER_SIZE) % COLOR_DITHER_SIZE
-                val wrappedY = (y + COLOR_DITHER_SIZE) % COLOR_DITHER_SIZE
-                return raw[wrappedY * COLOR_DITHER_SIZE + wrappedX]
-            }
-            val pixels = IntArray(raw.size) { index ->
-                val x = index % COLOR_DITHER_SIZE
-                val y = index / COLOR_DITHER_SIZE
-                val neighborMean = (
-                    sample(x - 1, y) +
-                        sample(x + 1, y) +
-                        sample(x, y - 1) +
-                        sample(x, y + 1)
-                    ) * 0.25f
-                val highFrequency = (raw[index] - neighborMean).coerceIn(-1f, 1f)
-                val value = (128f + highFrequency * 64f).toInt().coerceIn(64, 192)
+                val value = if ((state and 1) == 0) 88 else 168
                 Color.rgb(value, value, value)
             }
             Bitmap.createBitmap(

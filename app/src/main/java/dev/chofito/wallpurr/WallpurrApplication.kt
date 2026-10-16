@@ -3,6 +3,7 @@ package dev.chofito.wallpurr
 import android.app.Application
 import androidx.room.Room
 import dev.chofito.wallpurr.storage.ImageFileStore
+import dev.chofito.wallpurr.storage.MediaDerivativeCache
 import dev.chofito.wallpurr.storage.WallpurrRepository
 import dev.chofito.wallpurr.storage.db.WallpurrDatabase
 import dev.chofito.wallpurr.wallpaper.RotationController
@@ -43,8 +44,9 @@ class AppContainer(app: Application) {
     ).build()
 
     val files = ImageFileStore(app)
-    val repository = WallpurrRepository(database, files)
-    val applier = WallpaperApplier(app, repository)
+    val mediaCache = MediaDerivativeCache(app, files)
+    val repository = WallpurrRepository(database, files, mediaCache)
+    val applier = WallpaperApplier(app, repository, mediaCache)
     val scheduler = WallpaperScheduler(app)
     val notifier = RotationNotifier(app)
     val rotation = RotationController(app)

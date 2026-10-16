@@ -7,7 +7,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -67,9 +66,9 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -90,8 +89,9 @@ import dev.chofito.wallpurr.ui.components.PhotoMode
 import dev.chofito.wallpurr.ui.components.PhotoTile
 import dev.chofito.wallpurr.ui.components.gridReorderItem
 import dev.chofito.wallpurr.ui.components.rememberGridReorderState
+import dev.chofito.wallpurr.ui.components.rememberMediaThumbnailFile
 import dev.chofito.wallpurr.ui.components.rememberSettledFullyVisibleKeys
-import dev.chofito.wallpurr.ui.components.rememberVideoPoster
+import dev.chofito.wallpurr.ui.components.selectActiveGridMediaIds
 import dev.chofito.wallpurr.ui.playlistDetailViewModel
 import java.io.File
 
@@ -106,6 +106,7 @@ fun PlaylistDetailScreen(
     val images by viewModel.images.collectAsStateWithLifecycle()
     val shuffle by viewModel.shuffle.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val isTabletWidth = LocalConfiguration.current.screenWidthDp >= TABLET_MIN_WIDTH_DP
     val current = playlist ?: return
     val selectedTarget = WallpaperTarget.from(current.target)
     var intervalDraft by remember(current.id, current.intervalMinutes) {
@@ -128,22 +129,22 @@ fun PlaylistDetailScreen(
     } else {
         images
     }
+    val shownIds = remember(shown) { shown.map { it.id } }
+    val mediaKindsById = remember(shown) {
+        shown.associate { it.id to MediaKind.from(it.mediaType) }
+    }
     val settledVisibleIds = rememberSettledFullyVisibleKeys(
         gridState = gridState,
         enabled = mode == PhotoMode.Browse,
-        contentKey = shown.map { it.id },
+        contentKey = shownIds,
     )
-    val activeVideoIds = shown.asSequence()
-        .filter { it.id in settledVisibleIds && MediaKind.from(it.mediaType) == MediaKind.VIDEO }
-        .take(MAX_ACTIVE_GRID_VIDEOS)
-        .map { it.id }
-        .toSet()
-    val activeGifIds = shown.asSequence()
-        .filter { it.id in settledVisibleIds && MediaKind.from(it.mediaType) == MediaKind.GIF }
-        .take(MAX_ACTIVE_GRID_GIFS)
-        .map { it.id }
-        .toSet()
-    val activeMediaIds = activeVideoIds + activeGifIds
+    val activeMediaIds = remember(settledVisibleIds, mediaKindsById, isTabletWidth) {
+        selectActiveGridMediaIds(
+            fullyVisibleKeys = settledVisibleIds,
+            mediaKindsById = mediaKindsById,
+            maxActive = if (isTabletWidth) 1 else 2,
+        )
+    }
     val cover = images.firstOrNull()
     val isScrolling = gridState.isScrollInProgress
     val effectiveLockBlur = (
@@ -289,6 +290,7 @@ fun PlaylistDetailScreen(
                     mode = mode,
                     selected = image.id in selected,
                     active = image.id in activeMediaIds,
+                    thumbnailLoadingEnabled = !isScrolling,
                     modifier = Modifier
                         .then(if (mode == PhotoMode.Reorder) Modifier else Modifier.animateItem())
                         .gridReorderItem(
@@ -388,9 +390,8 @@ private fun DestinationPicker(
     lockOpacity: Float,
 ) {
     val coverFile = cover?.let { File(filesDir, "images/${it.storedName}") }
-    val coverKind = cover?.let { MediaKind.from(it.mediaType) }
-    val videoPoster = if (coverKind == MediaKind.VIDEO && coverFile != null) {
-        rememberVideoPoster(coverFile, maxSide = 480)
+    val coverThumbnail = if (cover != null && coverFile != null) {
+        rememberMediaThumbnailFile(cover, coverFile, maxSide = 480)
     } else {
         null
     }
@@ -414,9 +415,7 @@ private fun DestinationPicker(
                 target = WallpaperTarget.HOME,
                 label = stringResource(R.string.target_home_short),
                 selected = selected == WallpaperTarget.HOME,
-                coverFile = coverFile,
-                coverKind = coverKind,
-                videoPoster = videoPoster,
+                coverThumbnail = coverThumbnail,
                 lockBlurRadius = lockBlurRadius,
                 lockOpacity = lockOpacity,
                 onClick = { onSelect(WallpaperTarget.HOME) },
@@ -426,9 +425,7 @@ private fun DestinationPicker(
                 target = WallpaperTarget.LOCK,
                 label = stringResource(R.string.target_lock_short),
                 selected = selected == WallpaperTarget.LOCK,
-                coverFile = coverFile,
-                coverKind = coverKind,
-                videoPoster = videoPoster,
+                coverThumbnail = coverThumbnail,
                 lockBlurRadius = lockBlurRadius,
                 lockOpacity = lockOpacity,
                 onClick = { onSelect(WallpaperTarget.LOCK) },
@@ -438,9 +435,7 @@ private fun DestinationPicker(
                 target = WallpaperTarget.BOTH,
                 label = stringResource(R.string.target_both_short),
                 selected = selected == WallpaperTarget.BOTH,
-                coverFile = coverFile,
-                coverKind = coverKind,
-                videoPoster = videoPoster,
+                coverThumbnail = coverThumbnail,
                 lockBlurRadius = lockBlurRadius,
                 lockOpacity = lockOpacity,
                 onClick = { onSelect(WallpaperTarget.BOTH) },
@@ -463,9 +458,7 @@ private fun DestinationTile(
     target: WallpaperTarget,
     label: String,
     selected: Boolean,
-    coverFile: File?,
-    coverKind: MediaKind?,
-    videoPoster: android.graphics.Bitmap?,
+    coverThumbnail: File?,
     lockBlurRadius: Int,
     lockOpacity: Float,
     onClick: () -> Unit,
@@ -505,9 +498,7 @@ private fun DestinationTile(
                 when (target) {
                     WallpaperTarget.HOME -> {
                         DestinationCover(
-                            coverFile = coverFile,
-                            coverKind = coverKind,
-                            videoPoster = videoPoster,
+                            coverThumbnail = coverThumbnail,
                             label = label,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -519,9 +510,7 @@ private fun DestinationTile(
                     }
                     WallpaperTarget.LOCK -> {
                         DestinationCover(
-                            coverFile = coverFile,
-                            coverKind = coverKind,
-                            videoPoster = videoPoster,
+                            coverThumbnail = coverThumbnail,
                             label = label,
                             modifier = Modifier
                                 .fillMaxSize()
@@ -538,9 +527,7 @@ private fun DestinationTile(
                                 .clipToBounds(),
                         ) {
                             DestinationCover(
-                                coverFile = coverFile,
-                                coverKind = coverKind,
-                                videoPoster = videoPoster,
+                                coverThumbnail = coverThumbnail,
                                 label = label,
                                 modifier = Modifier.fillMaxSize(),
                             )
@@ -558,9 +545,7 @@ private fun DestinationTile(
                                 .clipToBounds(),
                         ) {
                             DestinationCover(
-                                coverFile = coverFile,
-                                coverKind = coverKind,
-                                videoPoster = videoPoster,
+                                coverThumbnail = coverThumbnail,
                                 label = label,
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -662,25 +647,15 @@ private fun LockPreviewClock(modifier: Modifier = Modifier) {
 
 @Composable
 private fun DestinationCover(
-    coverFile: File?,
-    coverKind: MediaKind?,
-    videoPoster: android.graphics.Bitmap?,
+    coverThumbnail: File?,
     label: String,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     when {
-        coverKind == MediaKind.VIDEO && videoPoster != null -> {
-            Image(
-                bitmap = videoPoster.asImageBitmap(),
-                contentDescription = label,
-                contentScale = ContentScale.Crop,
-                modifier = modifier,
-            )
-        }
-        coverFile != null && coverKind != MediaKind.VIDEO -> {
+        coverThumbnail != null -> {
             AsyncImage(
-                model = coverFile,
+                model = coverThumbnail,
                 contentDescription = label,
                 contentScale = ContentScale.Crop,
                 modifier = modifier,
@@ -724,5 +699,4 @@ private fun Modifier.lockPreviewEffect(blurRadius: Int, opacity: Float): Modifie
         )
 }
 
-private const val MAX_ACTIVE_GRID_VIDEOS = 2
-private const val MAX_ACTIVE_GRID_GIFS = 4
+private const val TABLET_MIN_WIDTH_DP = 600

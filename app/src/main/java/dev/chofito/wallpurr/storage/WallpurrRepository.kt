@@ -40,6 +40,7 @@ import java.util.zip.ZipOutputStream
 class WallpurrRepository(
     private val db: WallpurrDatabase,
     private val files: ImageFileStore,
+    private val mediaCache: MediaDerivativeCache,
     private val json: Json = Json { prettyPrint = true; ignoreUnknownKeys = true },
 ) {
     val folders: Flow<List<FolderEntity>> = db.folders().observeAll()
@@ -100,6 +101,7 @@ class WallpurrRepository(
     suspend fun resetAllLocalData() {
         db.clearAllTables()
         files.clearAll()
+        mediaCache.clear()
         libraryFolderId()
     }
 
@@ -180,6 +182,7 @@ class WallpurrRepository(
 
     suspend fun deleteImage(id: String) {
         val image = db.images().get(id) ?: return
+        mediaCache.invalidateSource(image.storedName)
         files.delete(image.storedName)
         db.images().delete(id)
     }
@@ -189,6 +192,7 @@ class WallpurrRepository(
         orientation: ScreenOrientation,
         transform: ImageTransform,
     ) {
+        val storedName = db.images().get(imageId)?.storedName
         val t = transform.clamped()
         db.transforms().upsert(
             ImageTransformEntity(
@@ -203,6 +207,7 @@ class WallpurrRepository(
                 containBackgroundColor = t.containBackgroundColor,
             ),
         )
+        storedName?.let(mediaCache::invalidateRenders)
     }
 
     suspend fun getImage(id: String): ImageAssetEntity? = db.images().get(id)
@@ -245,6 +250,13 @@ class WallpurrRepository(
                     ?: existing.lockOpacity,
             ),
         )
+        if (lockBlurRadius != null || lockOpacity != null) {
+            mediaCache.invalidateRenders(
+                db.playlistItems().getItems(id).mapNotNull { item ->
+                    db.images().get(item.imageId)?.storedName
+                },
+            )
+        }
     }
 
     suspend fun deletePlaylist(id: String) {
@@ -363,6 +375,8 @@ class WallpurrRepository(
     fun decodeBitmap(image: ImageAssetEntity, maxSide: Int) =
         files.decodeBitmap(files.file(image.storedName), maxSide, MediaKind.from(image.mediaType))
 
+    fun sourceFile(image: ImageAssetEntity) = files.file(image.storedName)
+
     suspend fun updateVideoPlayback(
         imageId: String,
         mode: VideoPlayMode,
@@ -393,6 +407,7 @@ class WallpurrRepository(
                 lockOpacity = opacity.coerceIn(LockStyle.MIN_OPACITY, 1f),
             ),
         )
+        mediaCache.invalidateRenders(existing.storedName)
     }
 
     fun lockStyle(image: ImageAssetEntity, playlist: PlaylistEntity): LockStyle =

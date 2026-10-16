@@ -2,7 +2,6 @@ package dev.chofito.wallpurr.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -28,8 +27,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,20 +40,19 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.outlined.Gif
 import androidx.compose.material.icons.outlined.PlayCircle
-import androidx.compose.ui.graphics.asImageBitmap
-import android.util.LruCache
 import coil3.compose.AsyncImage
 import dev.chofito.wallpurr.R
+import dev.chofito.wallpurr.WallpurrApplication
 import dev.chofito.wallpurr.playlist.WallpaperTarget
 import dev.chofito.wallpurr.storage.MediaKind
 import dev.chofito.wallpurr.storage.db.ImageAssetEntity
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 import java.io.File
 
 @Composable
@@ -90,50 +91,42 @@ fun ImageThumb(
     modifier: Modifier = Modifier,
     framed: Boolean = true,
     active: Boolean = false,
+    thumbnailLoadingEnabled: Boolean = true,
 ) {
     val file = File(filesDir, "images/${image.storedName}")
     val kind = MediaKind.from(image.mediaType)
     val shape = RoundedCornerShape(if (framed) 20.dp else 14.dp)
+    // One shared size avoids creating separate disk entries for library tiles, playlist cards,
+    // and the three-image playlist preview.
+    val thumbnailSide = 480
+    val thumbnail = rememberMediaThumbnailFile(
+        image = image,
+        file = file,
+        maxSide = thumbnailSide,
+        loadingEnabled = thumbnailLoadingEnabled,
+    )
     Box(
         modifier
             .then(if (framed) Modifier.fillMaxWidth().aspectRatio(3f / 4f) else Modifier)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant),
     ) {
+        if (thumbnail != null) {
+            AsyncImage(
+                model = thumbnail,
+                contentDescription = image.displayName,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         when {
             kind == MediaKind.VIDEO && active -> {
-                rememberVideoPoster(file, maxSide = if (framed) 360 else 240)?.let {
-                    Image(
-                        bitmap = it.asImageBitmap(),
-                        contentDescription = image.displayName,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
                 MutedGridVideoView(file = file, modifier = Modifier.fillMaxSize())
             }
             kind == MediaKind.GIF && active -> {
                 MutedGifView(file = file, modifier = Modifier.fillMaxSize())
             }
-            kind == MediaKind.VIDEO -> {
-                val poster = rememberVideoPoster(file, maxSide = if (framed) 360 else 240)
-                poster?.let {
-                    Image(
-                        bitmap = it.asImageBitmap(),
-                        contentDescription = image.displayName,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
-            else -> {
-                AsyncImage(
-                    model = file,
-                    contentDescription = image.displayName,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
+            else -> Unit
         }
         if (kind != MediaKind.IMAGE && !active) {
             Icon(
@@ -150,53 +143,30 @@ fun ImageThumb(
 }
 
 @Composable
-fun rememberVideoPoster(file: File, maxSide: Int = 720): android.graphics.Bitmap? {
-    val cacheKey = "${file.absolutePath}:${file.lastModified()}:$maxSide"
-    val poster by produceState(videoPosterCache.get(cacheKey), cacheKey) {
-        if (value != null) return@produceState
-        value = withContext(Dispatchers.IO) {
-            val retriever = android.media.MediaMetadataRetriever()
-            try {
-                retriever.setDataSource(file.absolutePath)
-                val raw = runCatching {
-                    retriever.getFrameAtTime(
-                        0L,
-                        android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-                    )
-                }.getOrNull() ?: runCatching {
-                    retriever.getFrameAtTime(
-                        -1L,
-                        android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-                    )
-                }.getOrNull() ?: return@withContext null
-                val longest = maxOf(raw.width, raw.height)
-                if (longest <= maxSide) {
-                    raw
-                } else {
-                    val scale = maxSide / longest.toFloat()
-                    android.graphics.Bitmap.createScaledBitmap(
-                        raw,
-                        (raw.width * scale).toInt().coerceAtLeast(1),
-                        (raw.height * scale).toInt().coerceAtLeast(1),
-                        true,
-                    ).also { scaled ->
-                        if (scaled !== raw) raw.recycle()
-                    }
-                }
+fun rememberMediaThumbnailFile(
+    image: ImageAssetEntity,
+    file: File,
+    maxSide: Int,
+    loadingEnabled: Boolean = true,
+): File? {
+    val application = LocalContext.current.applicationContext as? WallpurrApplication
+    // App-owned originals are immutable. Entity metadata is therefore a stable composition key
+    // and avoids repeated filesystem stat calls for every visible tile during recomposition.
+    val sourceFingerprint = "${image.id}:${image.storedName}:${image.addedAt}"
+    val kind = MediaKind.from(image.mediaType)
+    var thumbnail by remember(sourceFingerprint, kind, maxSide) { mutableStateOf<File?>(null) }
+    LaunchedEffect(sourceFingerprint, kind, maxSide, loadingEnabled) {
+        if (loadingEnabled && thumbnail == null) {
+            thumbnail = try {
+                application?.container?.mediaCache?.thumbnail(file, kind, maxSide)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 null
-            } finally {
-                retriever.release()
             }
         }
-        value?.let { videoPosterCache.put(cacheKey, it) }
     }
-    return poster
-}
-
-private val videoPosterCache = object : LruCache<String, android.graphics.Bitmap>(16 * 1024) {
-    override fun sizeOf(key: String, value: android.graphics.Bitmap): Int =
-        value.allocationByteCount / 1024
+    return thumbnail
 }
 
 @Composable

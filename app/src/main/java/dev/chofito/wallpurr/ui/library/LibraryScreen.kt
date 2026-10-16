@@ -60,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -76,6 +77,7 @@ import dev.chofito.wallpurr.ui.components.PhotoTile
 import dev.chofito.wallpurr.ui.components.PurrCard
 import dev.chofito.wallpurr.ui.components.pickImagesMaxItems
 import dev.chofito.wallpurr.ui.components.rememberSettledFullyVisibleKeys
+import dev.chofito.wallpurr.ui.components.selectActiveGridMediaIds
 import dev.chofito.wallpurr.ui.libraryViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -90,6 +92,7 @@ fun LibraryScreen(
     val rootFolderId by viewModel.rootFolderId.collectAsStateWithLifecycle()
     val columns by viewModel.columns.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val isTabletWidth = LocalConfiguration.current.screenWidthDp >= TABLET_MIN_WIDTH_DP
     var currentFolderId by rememberSaveable { mutableStateOf<String?>(null) }
     val currentFolder = folders.firstOrNull { it.id == currentFolderId }
     val userFolders = folders.filter { it.id != rootFolderId }
@@ -106,6 +109,7 @@ fun LibraryScreen(
     var folderName by remember { mutableStateOf("") }
     var confirmFolderDelete by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
+    val isScrolling = gridState.isScrollInProgress
 
     LaunchedEffect(currentFolderId, rootFolderId, folders) {
         if (currentFolderId != null && rootFolderId != null && currentFolder == null) {
@@ -114,22 +118,24 @@ fun LibraryScreen(
     }
     LaunchedEffect(currentFolderId) { gridState.scrollToItem(0) }
 
+    val gridContentKey = remember(userFolders, shown) {
+        userFolders.map { it.id } + shown.map { it.id }
+    }
+    val mediaKindsById = remember(shown) {
+        shown.associate { it.id to MediaKind.from(it.mediaType) }
+    }
     val settledVisibleIds = rememberSettledFullyVisibleKeys(
         gridState = gridState,
         enabled = mode == PhotoMode.Browse,
-        contentKey = userFolders.map { it.id } + shown.map { it.id },
+        contentKey = gridContentKey,
     )
-    val activeVideoIds = shown.asSequence()
-        .filter { it.id in settledVisibleIds && MediaKind.from(it.mediaType) == MediaKind.VIDEO }
-        .take(MAX_ACTIVE_GRID_VIDEOS)
-        .map { it.id }
-        .toSet()
-    val activeGifIds = shown.asSequence()
-        .filter { it.id in settledVisibleIds && MediaKind.from(it.mediaType) == MediaKind.GIF }
-        .take(MAX_ACTIVE_GRID_GIFS)
-        .map { it.id }
-        .toSet()
-    val activeIds = activeVideoIds + activeGifIds
+    val activeIds = remember(settledVisibleIds, mediaKindsById, isTabletWidth) {
+        selectActiveGridMediaIds(
+            fullyVisibleKeys = settledVisibleIds,
+            mediaKindsById = mediaKindsById,
+            maxActive = if (isTabletWidth) 1 else 2,
+        )
+    }
 
     val galleryPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(pickImagesMaxItems()),
@@ -447,6 +453,7 @@ fun LibraryScreen(
                     mode = mode,
                     selected = image.id in selected,
                     active = image.id in activeIds,
+                    thumbnailLoadingEnabled = !isScrolling,
                     modifier = Modifier.animateItem(),
                     onClick = {
                         when (mode) {
@@ -604,5 +611,4 @@ private enum class FolderDialogMode {
     RENAME,
 }
 
-private const val MAX_ACTIVE_GRID_VIDEOS = 2
-private const val MAX_ACTIVE_GRID_GIFS = 4
+private const val TABLET_MIN_WIDTH_DP = 600

@@ -38,17 +38,18 @@ import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import dev.chofito.wallpurr.editor.FitMode
 import dev.chofito.wallpurr.editor.ImageLayout
 import dev.chofito.wallpurr.editor.ImageTransform
+import dev.chofito.wallpurr.storage.MediaKind
 import dev.chofito.wallpurr.wallpaper.bindMutedVideo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import java.io.File
 
-fun LazyGridState.fullyVisibleKeys(): Set<Any> {
+fun LazyGridState.fullyVisibleKeys(): List<Any> {
     val info = layoutInfo
     val viewW = info.viewportSize.width
     val viewH = info.viewportSize.height
-    if (viewW <= 0 || viewH <= 0) return emptySet()
-    return buildSet {
+    if (viewW <= 0 || viewH <= 0) return emptyList()
+    return buildList {
         info.visibleItemsInfo.forEach { item ->
             val top = item.offset.y
             val left = item.offset.x
@@ -63,22 +64,32 @@ fun LazyGridState.fullyVisibleKeys(): Set<Any> {
     }
 }
 
+fun selectActiveGridMediaIds(
+    fullyVisibleKeys: List<Any>,
+    mediaKindsById: Map<String, MediaKind>,
+    maxActive: Int,
+): Set<String> = fullyVisibleKeys.asSequence()
+    .mapNotNull { it as? String }
+    .filter { id -> mediaKindsById[id]?.let { it != MediaKind.IMAGE } == true }
+    .take(maxActive.coerceAtLeast(0))
+    .toSet()
+
 @Composable
 fun rememberSettledFullyVisibleKeys(
     gridState: LazyGridState,
     enabled: Boolean,
     contentKey: Any,
-): Set<Any> {
-    var keys by remember(gridState) { mutableStateOf(emptySet<Any>()) }
+): List<Any> {
+    var keys by remember(gridState) { mutableStateOf(emptyList<Any>()) }
     LaunchedEffect(gridState, enabled, contentKey) {
         if (!enabled) {
-            keys = emptySet()
+            keys = emptyList()
             return@LaunchedEffect
         }
         snapshotFlow { gridState.isScrollInProgress }
             .collectLatest { scrolling ->
                 if (scrolling) {
-                    keys = emptySet()
+                    keys = emptyList()
                 } else {
                     delay(GRID_PLAYBACK_SETTLE_MS)
                     keys = gridState.fullyVisibleKeys()
@@ -352,4 +363,4 @@ private fun ImageView.applyImageTransform(
     ).toMatrix()
 }
 
-private const val GRID_PLAYBACK_SETTLE_MS = 140L
+private const val GRID_PLAYBACK_SETTLE_MS = 220L

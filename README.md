@@ -50,7 +50,7 @@ El selector del sistema decide dónde instala el live wallpaper. Wallpurr inspec
 - WorkManager para el siguiente cambio persistente.
 - `MediaPlayer` + EGL/OpenGL ES para el wallpaper de video.
 - Media3/ExoPlayer únicamente para previews de video en cuadrículas.
-- Coil para miniaturas de biblioteca.
+- Coil para presentar miniaturas, respaldado por una cache derivada persistente y acotada.
 - `kotlinx.serialization` para backups.
 - minSdk 26, compileSdk/targetSdk 37.
 

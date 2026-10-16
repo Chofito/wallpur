@@ -28,6 +28,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhoneIphone
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
@@ -72,6 +74,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -504,10 +507,13 @@ private fun CropStage(
     val density = LocalDensity.current
     val device = remember { DeviceViewport.current(context) }
     val image = remember(bitmap) { bitmap?.asImageBitmap() }
-    val hasLockEffects = lockBlurRadius > 0 || lockOpacity < 0.999f
+    var previewLockScreen by remember(imageId) { mutableStateOf(false) }
+    val previewBlurRadius = if (previewLockScreen) lockBlurRadius else 0
+    val previewOpacity = if (previewLockScreen) lockOpacity else 1f
+    val hasLockEffects = previewBlurRadius > 0 || previewOpacity < 0.999f
     val showLivePreview = mediaFile != null && when (mediaKind) {
         MediaKind.VIDEO -> !hasLockEffects
-        MediaKind.GIF -> lockBlurRadius == 0
+        MediaKind.GIF -> previewBlurRadius == 0
         MediaKind.IMAGE -> false
     }
 
@@ -537,7 +543,7 @@ private fun CropStage(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .previewLockEffect(lockBlurRadius, lockOpacity),
+                    .previewLockEffect(previewBlurRadius, previewOpacity),
             ) {
                 ContainBackgroundLayer(containBackdrop, transform)
                 if (showLivePreview) {
@@ -619,6 +625,20 @@ private fun CropStage(
                 style = Stroke(width = 2.dp.toPx()),
             )
         }
+        Box(
+            Modifier
+                .align(Alignment.TopStart)
+                .offset { IntOffset(left.roundToInt(), top.roundToInt()) }
+                .size(with(density) { frameW.toDp() }, with(density) { frameH.toDp() }),
+        ) {
+            CropPreviewTargetToggle(
+                previewLockScreen = previewLockScreen,
+                onPreviewLockScreenChange = { previewLockScreen = it },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(12.dp),
+            )
+        }
         Text(
             text = stringResource(R.string.editor_crop_hint),
             color = Color.White.copy(alpha = 0.72f),
@@ -626,6 +646,69 @@ private fun CropStage(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(16.dp),
+        )
+    }
+}
+
+@Composable
+private fun CropPreviewTargetToggle(
+    previewLockScreen: Boolean,
+    onPreviewLockScreenChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        shadowElevation = 5.dp,
+    ) {
+        Row(Modifier.padding(3.dp)) {
+            CropPreviewTargetButton(
+                selected = !previewLockScreen,
+                onClick = { onPreviewLockScreenChange(false) },
+                icon = Icons.Outlined.Home,
+                contentDescription = stringResource(R.string.target_home_short),
+            )
+            CropPreviewTargetButton(
+                selected = previewLockScreen,
+                onClick = { onPreviewLockScreenChange(true) },
+                icon = Icons.Outlined.Lock,
+                contentDescription = stringResource(R.string.target_lock_short),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CropPreviewTargetButton(
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: ImageVector,
+    contentDescription: String,
+) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(width = 42.dp, height = 36.dp)
+            .clip(RoundedCornerShape(17.dp))
+            .background(
+                if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color.Transparent
+                },
+            )
+            .clickable(onClick = onClick),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (selected) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.size(20.dp),
         )
     }
 }

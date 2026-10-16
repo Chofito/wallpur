@@ -13,13 +13,16 @@ import dev.chofito.wallpurr.editor.DeviceViewport
 import dev.chofito.wallpurr.editor.ImageLayout
 import dev.chofito.wallpurr.editor.ImageTransform
 import dev.chofito.wallpurr.editor.ScreenOrientation
+import dev.chofito.wallpurr.storage.MediaDerivativeCache
 import dev.chofito.wallpurr.storage.WallpurrRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class WallpaperApplier(
     private val context: Context,
     private val repository: WallpurrRepository,
+    private val mediaCache: MediaDerivativeCache,
 ) {
     fun liveWallpaperChooserIntent(): Intent {
         return Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).putExtra(
@@ -83,36 +86,63 @@ class WallpaperApplier(
         val screen = DeviceViewport.current(context)
         val width = screen.widthPx.coerceAtLeast(1)
         val height = screen.heightPx.coerceAtLeast(1)
-        val decodeSide = ImageLayout.requiredDecodeMaxSide(
-            imageWidth = image.width,
-            imageHeight = image.height,
-            viewportWidth = width,
-            viewportHeight = height,
-            transform = transform,
-            minimumSide = MIN_BITMAP_DECODE_SIDE,
-        )
-        val source = repository.decodeBitmap(image, decodeSide)
         val style = repository.lockStyle(image, playlist)
-        try {
-            val rendered = render(source, width, height, transform)
+        val sourceFile = repository.sourceFile(image)
+        val blurScale = context.resources.displayMetrics.density
+        val cacheKey = renderCacheKey(
+            variant = "lock",
+            width = width,
+            height = height,
+            orientation = orientation,
+            transform = transform,
+            lockBlurRadius = style.blurRadius,
+            lockOpacity = style.opacity,
+            densityScale = blurScale,
+        )
+        val cachedOutput = mediaCache.renderedBitmap(sourceFile, cacheKey)
+        val output = cachedOutput ?: run {
+            val decodeSide = ImageLayout.requiredDecodeMaxSide(
+                imageWidth = image.width,
+                imageHeight = image.height,
+                viewportWidth = width,
+                viewportHeight = height,
+                transform = transform,
+                minimumSide = MIN_BITMAP_DECODE_SIDE,
+            )
+            val source = repository.decodeBitmap(image, decodeSide)
             try {
-                val blurScale = context.resources.displayMetrics.density
-                val styled = applyLockStyle(rendered, style, blurScale)
-                try {
-                    WallpaperManager.getInstance(context).setBitmap(
-                        styled,
-                        null,
-                        true,
-                        WallpaperManager.FLAG_LOCK,
-                    )
-                } finally {
-                    if (styled !== rendered) styled.recycle()
+                val rendered = render(source, width, height, transform)
+                val styled = try {
+                    applyLockStyle(rendered, style, blurScale)
+                } catch (error: Throwable) {
+                    rendered.recycle()
+                    throw error
                 }
+                if (styled !== rendered) rendered.recycle()
+                styled
             } finally {
-                rendered.recycle()
+                source.recycle()
+            }
+        }
+        try {
+            WallpaperManager.getInstance(context).setBitmap(
+                output,
+                null,
+                true,
+                WallpaperManager.FLAG_LOCK,
+            )
+            if (cachedOutput == null) {
+                try {
+                    mediaCache.storeRenderedBitmap(sourceFile, cacheKey, output)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Cache is disposable. Applying a wallpaper must still succeed if storage is
+                    // full, Android purges cacheDir, or an entry cannot be encoded.
+                }
             }
         } finally {
-            source.recycle()
+            output.recycle()
         }
         ApplyResult.Ok
     }
@@ -128,25 +158,47 @@ class WallpaperApplier(
         val orientation = currentOrientation()
         val transform = repository.getTransforms(imageId)[orientation] ?: ImageTransform.Default
         val screen = DeviceViewport.current(context)
-        val decodeSide = ImageLayout.requiredDecodeMaxSide(
-            imageWidth = image.width,
-            imageHeight = image.height,
-            viewportWidth = screen.widthPx,
-            viewportHeight = screen.heightPx,
+        val width = screen.widthPx.coerceAtLeast(1)
+        val height = screen.heightPx.coerceAtLeast(1)
+        val sourceFile = repository.sourceFile(image)
+        val cacheKey = renderCacheKey(
+            variant = "home",
+            width = width,
+            height = height,
+            orientation = orientation,
             transform = transform,
-            minimumSide = MIN_BITMAP_DECODE_SIDE,
         )
-        val source = repository.decodeBitmap(image, decodeSide)
-        try {
-            val rendered = render(source, screen.widthPx, screen.heightPx, transform)
+        val cachedOutput = mediaCache.renderedBitmap(sourceFile, cacheKey)
+        val output = cachedOutput ?: run {
+            val decodeSide = ImageLayout.requiredDecodeMaxSide(
+                imageWidth = image.width,
+                imageHeight = image.height,
+                viewportWidth = width,
+                viewportHeight = height,
+                transform = transform,
+                minimumSide = MIN_BITMAP_DECODE_SIDE,
+            )
+            val source = repository.decodeBitmap(image, decodeSide)
             try {
-                WallpaperManager.getInstance(context)
-                    .setBitmap(rendered, null, true, WallpaperManager.FLAG_SYSTEM)
+                render(source, width, height, transform)
             } finally {
-                rendered.recycle()
+                source.recycle()
+            }
+        }
+        try {
+            WallpaperManager.getInstance(context)
+                .setBitmap(output, null, true, WallpaperManager.FLAG_SYSTEM)
+            if (cachedOutput == null) {
+                try {
+                    mediaCache.storeRenderedBitmap(sourceFile, cacheKey, output)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // See lock path: a cache failure is never an apply failure.
+                }
             }
         } finally {
-            source.recycle()
+            output.recycle()
         }
         ApplyResult.Ok
     }
@@ -190,6 +242,32 @@ class WallpaperApplier(
             ScreenOrientation.LANDSCAPE
         }
     }
+
+    private fun renderCacheKey(
+        variant: String,
+        width: Int,
+        height: Int,
+        orientation: ScreenOrientation,
+        transform: ImageTransform,
+        lockBlurRadius: Int = 0,
+        lockOpacity: Float = 1f,
+        densityScale: Float = 1f,
+    ): List<String> = listOf(
+        variant,
+        width.toString(),
+        height.toString(),
+        orientation.name,
+        transform.zoom.toRawBits().toString(),
+        transform.offsetX.toRawBits().toString(),
+        transform.offsetY.toRawBits().toString(),
+        transform.fitMode.name,
+        transform.rotationDegrees.toRawBits().toString(),
+        transform.containBackgroundMode.name,
+        transform.containBackgroundColor.toString(),
+        lockBlurRadius.toString(),
+        lockOpacity.toRawBits().toString(),
+        densityScale.toRawBits().toString(),
+    )
 
     private companion object {
         const val MIN_BITMAP_DECODE_SIDE = 1080

@@ -310,12 +310,24 @@ Editar posición, zoom, fit, rotación, color o efectos debe refrescar el wallpa
 
 Una cache solo es válida si su key incluye todo lo que cambia el resultado. Para transform/effects:
 
-- invalidar cache de blur;
+- `MediaDerivativeCache` incluye huella del original, viewport, orientación, transform completo,
+  densidad, blur y opacidad en la key del render;
+- al guardar transform o estilo, eliminar los renders del medio; al cambiar el estilo heredado de
+  una playlist, eliminar los renders de sus medios que pudieran heredarlo;
 - actualizar posiciones EGL;
 - conservar/reemplazar backdrop según image id y modo;
 - redibujar textura residente si no cambió el source.
 
 Síntoma típico de cache incorrecta: el editor guarda el valor, pero el wallpaper solo cambia después de Next/Previous.
+
+Los archivos derivados viven en `cacheDir`, nunca junto a los originales. Android puede borrarlos
+cuando necesite espacio; una ausencia o fallo de escritura siempre cae al render normal. No se
+precalcula toda la biblioteca: miniaturas y wallpapers finales se crean de forma perezosa para no
+convertir una importación grande en una ráfaga de CPU, batería y almacenamiento.
+
+Después de invalidar un transform o estilo hay 750 ms de calma sin escrituras de renders. Esto evita
+comprimir un PNG de pantalla completa por cada paso de un slider; el wallpaper sí se refresca y el
+resultado estable se guarda perezosamente en un uso posterior.
 
 La rotación vertical↔horizontal también invalida el transform residente. No basta con recalcular el
 viewport usando el mismo objeto: el engine debe leer de Room el perfil de la nueva orientación. Se
@@ -382,8 +394,10 @@ Un player por tile visible es caro. La estrategia actual:
 - poster estático por defecto;
 - play solo para keys totalmente visibles;
 - apagar players durante scroll;
-- esperar 140 ms después de asentarse;
-- cache LRU acotado para posters;
+- esperar 220 ms después de asentarse;
+- limitar videos y GIFs en conjunto: dos en teléfono y uno en tablet;
+- no iniciar ni terminar el encode de miniaturas nuevas durante un fling;
+- miniatura persistente acotada en disco y cache de memoria de Coil;
 - liberar player en `onDispose`/`onRelease`.
 
 No reproduzcas todos los videos de la lista fuera del viewport aunque otras apps parezcan hacerlo; esas apps usan pools, prefetch y pipelines especializados.

@@ -448,11 +448,19 @@ El switch configura la política; no intenta activar el modo de ahorro del siste
 ## Caches y decisiones de rendimiento
 
 - Decode de wallpaper basado en `requiredDecodeMaxSide`.
+- Miniaturas derivadas de 480 px en `cacheDir` (96 MB máximo), compartidas por biblioteca,
+  tarjetas y playlists. Sólo se generan para elementos visibles, con dos generadores simultáneos;
+  los trabajos aún no terminados se cancelan durante un fling y se retoman al asentarse el scroll.
+- Renders estáticos finales en PNG sin pérdida (256 MB máximo), reutilizables por orientación,
+  viewport, transform y estilo de bloqueo.
 - Backdrop limitado a 720 px y retenido solo mientras aplica.
 - Difuminado CPU con working set acotado y resolución proporcional a la intensidad.
 - Un `RenderEffect` a resolución completa y cache de `RenderNode` para stills de lock.
-- Cache LRU de posters de video en UI.
-- Videos de cuadrícula solo cuando están totalmente visibles y el scroll se asentó.
+- Coil mantiene la cache de memoria de UI; los posters sobreviven al cierre del proceso mediante la
+  cache derivada en almacenamiento.
+- Medios animados de cuadrícula sólo cuando están totalmente visibles y el scroll lleva 220 ms
+  asentado. Se reproducen como máximo dos en teléfono y uno en anchos de tablet; videos y GIFs
+  comparten ese límite.
 - Pulsos, notificación y aplicación estática de lock conflated para absorber ráfagas.
 - EGL/window surface persistente entre tipos de medio cuando no hay efectos.
 - Crossfade sincronizado con `Choreographer`; cero frames programados cuando no hay transición o el
