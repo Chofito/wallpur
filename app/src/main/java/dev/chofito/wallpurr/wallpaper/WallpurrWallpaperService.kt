@@ -156,6 +156,11 @@ class WallpurrWallpaperService : WallpaperService() {
         private var desiredOrientation: ScreenOrientation? = null
         private var orientationReloadScheduled = false
         private var orientationReloadRunning = false
+        // A load was superseded by a generation bump (rotation, surface change) rather than by a
+        // newer load. Rotating away and back within the decode window would otherwise leave the
+        // old image on screen, because the orientation alone no longer differs.
+        private var contentReloadPending = false
+        private var runningLoads = 0
         private var surfaceReady = false
         private var kind = MediaKind.IMAGE
         private var playlistTarget = WallpaperTarget.BOTH
@@ -222,7 +227,10 @@ class WallpurrWallpaperService : WallpaperService() {
         private val reloadForOrientation = Runnable {
             orientationReloadScheduled = false
             val orientation = desiredOrientation ?: return@Runnable
-            if (!surfaceReady || loadedOrientation == orientation || orientationReloadRunning) {
+            if (
+                !surfaceReady || orientationReloadRunning ||
+                (loadedOrientation == orientation && !contentReloadPending)
+            ) {
                 return@Runnable
             }
             orientationReloadRunning = true
@@ -346,6 +354,7 @@ class WallpurrWallpaperService : WallpaperService() {
             loadedOrientation = null
             desiredOrientation = null
             orientationReloadScheduled = false
+            contentReloadPending = false
             allowCanvas = false
             drawRetryCount = 0
             handler.removeCallbacks(reloadForOrientation)
@@ -410,7 +419,8 @@ class WallpurrWallpaperService : WallpaperService() {
                     "$loadedViewportHeight kind=$kind canvas=$allowCanvas egl=$videoOwnsSurface " +
                     "holdingTransition=${canvasTransitionFrom != null} visible=$visible " +
                     "keyguard=$keyguardLocked flags=${destinationFlags()} " +
-                    "reload(scheduled=$orientationReloadScheduled running=$orientationReloadRunning)",
+                    "reload(scheduled=$orientationReloadScheduled running=$orientationReloadRunning " +
+                    "contentPending=$contentReloadPending)",
             )
         }
 
@@ -424,11 +434,8 @@ class WallpurrWallpaperService : WallpaperService() {
                 handler.removeCallbacks(reloadForOrientation)
                 orientationReloadScheduled = false
             }
-            if (loadedOrientation != orientation) {
-                scheduleOrientationReloadIfNeeded()
-                return false
-            }
-            return true
+            scheduleOrientationReloadIfNeeded()
+            return loadedOrientation == orientation
         }
 
         private fun scheduleOrientationReloadIfNeeded(
@@ -440,8 +447,8 @@ class WallpurrWallpaperService : WallpaperService() {
             }
             val orientation = desiredOrientation ?: return
             if (
-                !surfaceReady || loadedOrientation == orientation ||
-                orientationReloadScheduled || orientationReloadRunning
+                !surfaceReady || orientationReloadScheduled || orientationReloadRunning ||
+                (loadedOrientation == orientation && !contentReloadPending)
             ) {
                 return
             }
@@ -590,12 +597,28 @@ class WallpurrWallpaperService : WallpaperService() {
         private suspend fun loadCurrent(
             requestedOrientation: ScreenOrientation? = null,
         ) {
+            // loadCurrentUnsafe claims this generation; any other value afterwards means the load
+            // was superseded before it could commit.
+            val ownGeneration = loadGeneration + 1
+            runningLoads += 1
+            var cancelled = false
             try {
                 loadCurrentUnsafe(requestedOrientation)
             } catch (cancellation: CancellationException) {
+                cancelled = true
                 throw cancellation
             } catch (error: Throwable) {
                 Log.e(TAG, "Wallpaper load failed; keeping previous media", error)
+            } finally {
+                runningLoads -= 1
+                if (!cancelled) {
+                    if (loadGeneration == ownGeneration) {
+                        contentReloadPending = false
+                    } else if (surfaceReady) {
+                        contentReloadPending = true
+                        if (runningLoads == 0) scheduleOrientationReloadIfNeeded()
+                    }
+                }
             }
         }
 
