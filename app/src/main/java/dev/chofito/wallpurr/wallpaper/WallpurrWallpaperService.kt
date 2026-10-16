@@ -54,6 +54,7 @@ import dev.chofito.wallpurr.storage.db.ImageAssetEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -68,7 +69,12 @@ import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 class WallpurrWallpaperService : WallpaperService() {
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    // Without a handler, any uncaught exception in a launched coroutine kills the process.
+    private val serviceScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, error ->
+            Log.e(TAG, "Uncaught exception in service scope", error)
+        },
+    )
     private val activeEngines = linkedSetOf<WallpurrEngine>()
     private var initialDestinationReconcileScheduled = false
 
@@ -97,7 +103,14 @@ class WallpurrWallpaperService : WallpaperService() {
     }
 
     inner class WallpurrEngine : Engine() {
-        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        private val scope = CoroutineScope(
+            SupervisorJob() + Dispatchers.Main.immediate + CoroutineExceptionHandler { _, error ->
+                Log.e(TAG, "Uncaught exception in engine scope", error)
+            },
+        )
+        // Consecutive renderer failures for one image; bounds the release -> reload loop.
+        private var rendererFailureImageId: String? = null
+        private var rendererFailureCount = 0
         private val handler = Handler(Looper.getMainLooper())
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         private val transitionPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -532,7 +545,25 @@ class WallpurrWallpaperService : WallpaperService() {
             }
         }
 
+        /**
+         * Decoders can throw on corrupt files or OOM. An escaped exception would kill the process
+         * and the restarted wallpaper would reload the same file, so fail safe here: log and leave
+         * whatever is currently presented. Each branch below already recycles what it owns in its
+         * own `finally`.
+         */
         private suspend fun loadCurrent(
+            requestedOrientation: ScreenOrientation? = null,
+        ) {
+            try {
+                loadCurrentUnsafe(requestedOrientation)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Throwable) {
+                Log.e(TAG, "Wallpaper load failed; keeping previous media", error)
+            }
+        }
+
+        private suspend fun loadCurrentUnsafe(
             requestedOrientation: ScreenOrientation? = null,
         ) {
             if (!surfaceReady) return
@@ -769,6 +800,14 @@ class WallpurrWallpaperService : WallpaperService() {
             ) {
                 // Keep the EGL window producer and its last presented frame. Only replace the
                 // decoder feeding its SurfaceTexture, avoiding the video -> Canvas -> EGL cycle.
+                val backdrop = decodeContainBackdrop(repo, image, nextTransform)
+                if (!isCurrentLoad(generation)) {
+                    backdrop?.recycle()
+                    return
+                }
+                // Commit only after the generation check: if a superseded load had published
+                // video B's id while the player still plays A, `sameVideo` would later match
+                // and never replace the player. The backdrop decode does not read this state.
                 commitLoadedMedia(
                     imageId,
                     image,
@@ -777,11 +816,6 @@ class WallpurrWallpaperService : WallpaperService() {
                     nextLockStyle,
                     orientation,
                 )
-                val backdrop = decodeContainBackdrop(repo, image, nextTransform)
-                if (!isCurrentLoad(generation)) {
-                    backdrop?.recycle()
-                    return
-                }
                 replaceVideoInPlace(generation, file, image, backdrop)
                 rendererBlurBackdropImageId = imageId.takeIf {
                     nextTransform.usesBlurContainBackground() && backdrop != null
@@ -1014,12 +1048,11 @@ class WallpurrWallpaperService : WallpaperService() {
                                 ) return@presented
                                 rendererBitmapPending = false
                                 if (presented) {
+                                    rendererFailureCount = 0
                                     rendererShowsBitmap = true
                                     scope.launch { applyVisibility() }
                                 } else {
-                                    releaseMedia {
-                                        if (surfaceReady) scope.launch { loadCurrent() }
-                                    }
+                                    releaseMedia { reloadAfterRendererFailure() }
                                 }
                             }
                             rendererBlurBackdropImageId = imageId.takeIf {
@@ -1166,6 +1199,11 @@ class WallpurrWallpaperService : WallpaperService() {
                 containBackdropImageId = null
             }
             if (rendererBlurBackdropImageId != imageId) rendererBlurBackdropImageId = null
+            // A different image gets a fresh failure budget.
+            if (rendererFailureImageId != imageId) {
+                rendererFailureImageId = null
+                rendererFailureCount = 0
+            }
             loadedImageId = imageId
             loadedOrientation = imageOrientation
             kind = mediaKind
@@ -1188,6 +1226,31 @@ class WallpurrWallpaperService : WallpaperService() {
 
         private fun isCurrentLoad(generation: Long): Boolean =
             generation == loadGeneration && surfaceReady
+
+        /**
+         * A persistent EGL failure (oversized texture, BufferQueue already connected, bad alloc)
+         * would otherwise loop decode -> EGL init -> fail -> release forever. Retry a couple of
+         * times with backoff, then stop until a different image is loaded.
+         */
+        private fun reloadAfterRendererFailure() {
+            if (!surfaceReady) return
+            val failedImageId = loadedImageId
+            if (failedImageId != rendererFailureImageId) {
+                rendererFailureImageId = failedImageId
+                rendererFailureCount = 0
+            }
+            val attempt = rendererFailureCount
+            rendererFailureCount += 1
+            if (attempt >= RENDERER_RELOAD_BACKOFF_MS.size) {
+                Log.e(TAG, "Renderer failed repeatedly for $failedImageId; not reloading")
+                return
+            }
+            val delayMs = RENDERER_RELOAD_BACKOFF_MS[attempt]
+            scope.launch {
+                delay(delayMs)
+                if (surfaceReady) loadCurrent()
+            }
+        }
 
         /**
          * `withContext` has a prompt-cancellation hand-off: work can finish on the worker thread
@@ -1351,6 +1414,7 @@ class WallpurrWallpaperService : WallpaperService() {
                             !surfaceReady
                         ) return@presented
                         videoFramePresented = true
+                        rendererFailureCount = 0
                         rendererShowsBitmap = false
                         rendererBitmapPending = false
                         rendererBitmapMaxSide = 0
@@ -1361,9 +1425,7 @@ class WallpurrWallpaperService : WallpaperService() {
                     onError = rendererError@{ error ->
                         if (videoRenderer !== renderer) return@rendererError
                         Log.e(TAG, "Wallpaper GL renderer failed", error)
-                        releaseMedia {
-                            if (surfaceReady) scope.launch { loadCurrent() }
-                        }
+                        releaseMedia { reloadAfterRendererFailure() }
                     },
                 )
                 videoRenderer = renderer
@@ -1434,6 +1496,7 @@ class WallpurrWallpaperService : WallpaperService() {
                         !surfaceReady
                     ) return@presented
                     videoFramePresented = true
+                    rendererFailureCount = 0
                     rendererShowsBitmap = false
                     rendererBitmapPending = false
                     rendererBitmapMaxSide = 0
@@ -1447,9 +1510,7 @@ class WallpurrWallpaperService : WallpaperService() {
                     // This renderer can now outlive several videos, so the constructor's file/image
                     // may no longer be current. Reload repository state instead of retrying stale
                     // media captured by this callback.
-                    releaseMedia {
-                        if (surfaceReady) scope.launch { loadCurrent() }
-                    }
+                    releaseMedia { reloadAfterRendererFailure() }
                 },
             )
             videoRenderer = renderer
@@ -1493,9 +1554,7 @@ class WallpurrWallpaperService : WallpaperService() {
                     if (!isCurrentLoad(generation) || videoRenderer !== renderer) return@next
                     if (inputSurface == null) {
                         Log.w(TAG, "Video input surface became unavailable; recreating EGL")
-                        releaseMedia {
-                            if (surfaceReady) scope.launch { loadCurrent() }
-                        }
+                        releaseMedia { reloadAfterRendererFailure() }
                         return@next
                     }
                     videoInputSurface = inputSurface
@@ -2470,6 +2529,7 @@ class WallpurrWallpaperService : WallpaperService() {
 
     private companion object {
         const val TAG = "WallpurrWallpaper"
+        val RENDERER_RELOAD_BACKOFF_MS = longArrayOf(250L, 1_000L)
         const val MAX_VIDEO_RETRIES = 3
         const val VIDEO_RETRY_DELAY_MS = 200L
         const val MIN_BITMAP_DECODE_SIDE = 1080
