@@ -2722,13 +2722,11 @@ private class HardwareBlurCache {
         }
         drawBlurNode(canvas, nextNode, renderWidth, renderHeight)
         drawColorDither(canvas)
-        if (cacheFrame) {
-            node = nextNode
-            key = nextKey
-        } else {
-            // GIF frames change on every invalidation, so never retain their display list.
-            nextNode.discardDisplayList()
-        }
+        // Keep the node alive until the next draw/clear even when it is not reusable (GIF frames,
+        // crossfades). The canvas is only synced to the RenderThread when it is posted, so
+        // discarding the display list here published an empty node: dither over black.
+        node = nextNode
+        key = if (cacheFrame) nextKey else null
         return true
     }
 
