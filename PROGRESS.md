@@ -6,7 +6,7 @@ Este archivo inventaría lo presente en el árbol. No es evidencia de compilaci�
 
 ## Base de la aplicación
 
-- [x] App Android Kotlin/Compose, minSdk 26, target/compile 37.
+- [x] App Android Kotlin/Compose, minSdk 28, target/compile 37.
 - [x] Material 3, color dinámico, edge-to-edge y navegación adaptativa bar/rail.
 - [x] DI manual mediante `AppContainer`.
 - [x] Room v4 con migraciones 1→2→3→4.

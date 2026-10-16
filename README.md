@@ -52,7 +52,7 @@ El selector del sistema decide dónde instala el live wallpaper. Wallpurr inspec
 - Media3/ExoPlayer únicamente para previews de video en cuadrículas.
 - Coil para presentar miniaturas, respaldado por una cache derivada persistente y acotada.
 - `kotlinx.serialization` para backups.
-- minSdk 26, compileSdk/targetSdk 37.
+- minSdk 28 (Android 9; `ImageDecoder` y `AnimatedImageDrawable` lo requieren), compileSdk/targetSdk 37.
 
 La aplicación no declara permiso de red y no necesita backend.
 

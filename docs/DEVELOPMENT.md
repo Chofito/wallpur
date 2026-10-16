@@ -4,7 +4,7 @@
 
 - Android Studio con JBR incluido.
 - Android SDK existente en `~/Library/Android/sdk`.
-- Dispositivo/emulador API 26+ con soporte para live wallpaper.
+- Dispositivo/emulador API 28+ con soporte para live wallpaper.
 - Para los casos prioritarios: Galaxy S25 Ultra y Galaxy Tab S9.
 
 No instales un JDK alterno ni herramientas Android globales para arreglar configuración local.
@@ -36,7 +36,7 @@ app/build/outputs/apk/debug/app-debug.apk
 | --- | --- |
 | Módulo | `:app` |
 | applicationId | `dev.chofito.wallpurr` |
-| minSdk | 26 |
+| minSdk | 28 |
 | compileSdk / targetSdk | 37 |
 | JVM | 11 |
 | Kotlin | 2.2.10 |
