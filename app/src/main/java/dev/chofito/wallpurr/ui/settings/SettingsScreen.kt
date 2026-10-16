@@ -2,7 +2,6 @@ package dev.chofito.wallpurr.ui.settings
 
 import android.content.Intent
 import android.net.Uri
-import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -179,15 +178,14 @@ fun SettingsScreen(
             )
             PurrCard(
                 onClick = {
-                    val pm = context.getSystemService(PowerManager::class.java)
-                    val intent = if (pm.isIgnoringBatteryOptimizations(context.packageName)) {
-                        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                    } else {
-                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                            data = Uri.parse("package:${context.packageName}")
-                        }
+                    // Play does not allow the direct exemption request for this kind of app;
+                    // open the system list so the user can choose Wallpurr manually.
+                    val list = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    val details = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:${context.packageName}")
                     }
-                    context.startActivity(intent)
+                    runCatching { context.startActivity(list) }
+                        .recoverCatching { context.startActivity(details) }
                 },
             ) {
                 ListItem(
