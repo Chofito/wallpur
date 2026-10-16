@@ -10,20 +10,87 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
+import java.util.UUID
 
 class ImageFileStore(private val context: Context) {
     val imagesDir: File
         get() = File(context.filesDir, "images").also { it.mkdirs() }
 
     fun file(storedName: String): File {
-        require(
-            storedName.isNotBlank() &&
-                storedName != "." &&
-                storedName != ".." &&
-                '/' !in storedName &&
-                '\\' !in storedName,
-        ) { "Nombre de archivo no válido" }
+        require(isValidStoredName(storedName)) { "Nombre de archivo no válido" }
         return File(imagesDir, storedName)
+    }
+
+    fun isValidStoredName(storedName: String): Boolean =
+        storedName.isNotBlank() &&
+            storedName != "." &&
+            storedName != ".." &&
+            '/' !in storedName &&
+            '\\' !in storedName
+
+    /** Free bytes on the volume holding the private library. */
+    fun availableBytes(): Long = imagesDir.usableSpace
+
+    /**
+     * Scratch directory for multi-file imports (backups). Files written here never touch the
+     * library until [commitStaged] moves them, so a failed or hostile archive cannot truncate or
+     * delete media the user already has.
+     */
+    fun createStagingDir(): File =
+        File(context.cacheDir, "import-staging/${UUID.randomUUID()}").also { it.mkdirs() }
+
+    /**
+     * Copies [input] into [stagingDir] under [storedName], failing once more than [maxBytes] have
+     * been read. Returns the number of bytes written.
+     */
+    fun stageFromStream(
+        input: InputStream,
+        storedName: String,
+        stagingDir: File,
+        maxBytes: Long,
+    ): Long {
+        require(isValidStoredName(storedName)) { "Nombre de archivo no válido" }
+        val dest = File(stagingDir, storedName)
+        var total = 0L
+        dest.outputStream().use { output ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > maxBytes) {
+                    error("El respaldo es demasiado grande para el espacio disponible")
+                }
+                output.write(buffer, 0, read)
+            }
+        }
+        return total
+    }
+
+    /**
+     * Moves the staged files named in [storedNames] into the library. Existing library files are
+     * never overwritten: stored names are unique per media, so an existing file is the same media.
+     * Returns the names that were actually added, so a caller can roll them back.
+     */
+    fun commitStaged(stagingDir: File, storedNames: Collection<String>): List<String> {
+        val added = mutableListOf<String>()
+        try {
+            storedNames.forEach { name ->
+                if (!isValidStoredName(name)) return@forEach
+                val staged = File(stagingDir, name)
+                val dest = file(name)
+                if (!staged.isFile || dest.exists()) return@forEach
+                if (!staged.renameTo(dest)) {
+                    staged.copyTo(dest)
+                    staged.delete()
+                }
+                added += name
+            }
+        } catch (error: Throwable) {
+            added.forEach { file(it).delete() }
+            throw error
+        }
+        return added
     }
 
     suspend fun importFromUri(uri: Uri, imageId: String): ImportedImage = withContext(Dispatchers.IO) {
@@ -56,17 +123,6 @@ class ImageFileStore(private val context: Context) {
                 mediaType = actualKind,
                 durationMs = meta.durationMs,
             )
-        } catch (error: Throwable) {
-            dest.delete()
-            throw error
-        }
-    }
-
-    fun importFromStream(input: InputStream, storedName: String): File {
-        val dest = file(storedName)
-        return try {
-            dest.outputStream().use { output -> input.copyTo(output) }
-            dest
         } catch (error: Throwable) {
             dest.delete()
             throw error

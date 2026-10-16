@@ -28,10 +28,12 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -99,9 +101,12 @@ class WallpurrRepository(
     }
 
     suspend fun resetAllLocalData() {
-        db.clearAllTables()
-        files.clearAll()
-        mediaCache.clear()
+        // clearAllTables() is a blocking call that Room rejects on the main thread.
+        withContext(Dispatchers.IO) {
+            db.clearAllTables()
+            files.clearAll()
+            mediaCache.clear()
+        }
         libraryFolderId()
     }
 
@@ -182,9 +187,11 @@ class WallpurrRepository(
 
     suspend fun deleteImage(id: String) {
         val image = db.images().get(id) ?: return
+        // Row first: a row without its file would surface as broken media, whereas an orphan file
+        // left by a failed delete is invisible and harmless.
+        db.images().delete(id)
         mediaCache.invalidateSource(image.storedName)
         files.delete(image.storedName)
-        db.images().delete(id)
     }
 
     suspend fun saveTransform(
@@ -467,14 +474,14 @@ class WallpurrRepository(
 
     fun fileExists(image: ImageAssetEntity): Boolean = files.file(image.storedName).exists()
 
-    suspend fun exportJson(uri: Uri, context: Context) {
+    suspend fun exportJson(uri: Uri, context: Context) = withContext(Dispatchers.IO) {
         val backup = buildBackup()
         context.contentResolver.openOutputStream(uri)?.use { out ->
             out.write(json.encodeToString(WallpurrBackup.serializer(), backup).toByteArray())
         } ?: error("No se pudo escribir el JSON")
     }
 
-    suspend fun exportZip(uri: Uri, context: Context) {
+    suspend fun exportZip(uri: Uri, context: Context) = withContext(Dispatchers.IO) {
         val backup = buildBackup()
         context.contentResolver.openOutputStream(uri)?.use { raw ->
             ZipOutputStream(raw).use { zip ->
@@ -503,40 +510,69 @@ class WallpurrRepository(
     }
 
     private suspend fun importJson(uri: Uri, context: Context): ImportResult {
-        val text = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
-            ?: error("No se pudo leer el JSON")
+        val text = withContext(Dispatchers.IO) {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                input.readBoundedBytes(MAX_CONFIG_BYTES).decodeToString()
+            } ?: error("No se pudo leer el JSON")
+        }
         return applyBackup(
             json.decodeFromString(WallpurrBackup.serializer(), text),
             missingImagesOk = true,
         )
     }
 
+    /**
+     * Restores a ZIP backup atomically from the user's point of view: media is extracted into a
+     * staging directory under a byte budget, the archive must contain a valid config.json, and
+     * only then are new files moved into the library and the rows written. Existing library files
+     * are never overwritten, and any failure leaves the library exactly as it was.
+     */
     private suspend fun importZip(uri: Uri, context: Context): ImportResult {
-        val parsed = withContext(Dispatchers.IO) {
-            var backup: WallpurrBackup? = null
-            context.contentResolver.openInputStream(uri)?.use { raw ->
-                ZipInputStream(BufferedInputStream(raw)).use { zip ->
-                    var entry = zip.nextEntry
-                    while (entry != null) {
-                        when {
-                            entry.name == "config.json" && !entry.isDirectory -> {
-                                backup = json.decodeFromString(
-                                    WallpurrBackup.serializer(),
-                                    zip.readEntryBytes(MAX_CONFIG_BYTES).decodeToString(),
-                                )
+        val staging = files.createStagingDir()
+        try {
+            val parsed = withContext(Dispatchers.IO) {
+                var backup: WallpurrBackup? = null
+                var budget = (files.availableBytes() - IMPORT_FREE_SPACE_RESERVE_BYTES)
+                    .coerceAtLeast(0L)
+                context.contentResolver.openInputStream(uri)?.use { raw ->
+                    ZipInputStream(BufferedInputStream(raw)).use { zip ->
+                        var entry = zip.nextEntry
+                        while (entry != null) {
+                            val storedName = entry.name.removePrefix("images/")
+                            when {
+                                entry.isDirectory -> Unit
+                                entry.name == "config.json" -> {
+                                    backup = json.decodeFromString(
+                                        WallpurrBackup.serializer(),
+                                        zip.readBoundedBytes(MAX_CONFIG_BYTES).decodeToString(),
+                                    )
+                                }
+                                entry.name.startsWith("images/") &&
+                                    files.isValidStoredName(storedName) &&
+                                    !files.file(storedName).exists() -> {
+                                    budget -= files.stageFromStream(zip, storedName, staging, budget)
+                                }
                             }
-                            entry.name.startsWith("images/") && !entry.isDirectory -> {
-                                files.importFromStream(zip, entry.name.removePrefix("images/"))
-                            }
+                            zip.closeEntry()
+                            entry = zip.nextEntry
                         }
-                        zip.closeEntry()
-                        entry = zip.nextEntry
                     }
-                }
-            } ?: error("No se pudo leer el zip")
-            backup ?: error("El zip no contiene config.json")
+                } ?: error("No se pudo leer el zip")
+                backup ?: error("El zip no contiene config.json")
+            }
+            val added = withContext(Dispatchers.IO) {
+                files.commitStaged(staging, parsed.images.map { it.storedName })
+            }
+            return try {
+                applyBackup(parsed, missingImagesOk = true)
+            } catch (error: Throwable) {
+                // The rows were rolled back by the transaction; drop the files they would own.
+                withContext(NonCancellable + Dispatchers.IO) { added.forEach(files::delete) }
+                throw error
+            }
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) { staging.deleteRecursively() }
         }
-        return applyBackup(parsed, missingImagesOk = true)
     }
 
     private suspend fun applyBackup(backup: WallpurrBackup, missingImagesOk: Boolean): ImportResult {
@@ -544,7 +580,9 @@ class WallpurrRepository(
         db.withTransaction {
             backup.folders.forEach { db.folders().upsert(it.toEntity()) }
             backup.images.forEach { image ->
-                if (!files.file(image.storedName).exists()) {
+                if (!files.isValidStoredName(image.storedName) ||
+                    !files.file(image.storedName).exists()
+                ) {
                     skipped += image.displayName
                     if (missingImagesOk) return@forEach
                 }
@@ -575,9 +613,9 @@ class WallpurrRepository(
                 }
                 db.shuffle().delete(playlist.id)
             }
-            backup.activePlaylistId?.let {
-                db.settings().upsert(SettingEntity(KEY_ACTIVE_PLAYLIST, it))
-            }
+            backup.activePlaylistId
+                ?.takeIf { id -> db.playlists().get(id) != null }
+                ?.let { db.settings().upsert(SettingEntity(KEY_ACTIVE_PLAYLIST, it)) }
         }
         return ImportResult(skippedImages = skipped)
     }
@@ -622,6 +660,8 @@ class WallpurrRepository(
 
     companion object {
         private const val MAX_CONFIG_BYTES = 16 * 1024 * 1024
+        // Keeps the device usable after a large restore instead of filling internal storage.
+        private const val IMPORT_FREE_SPACE_RESERVE_BYTES = 512L * 1024 * 1024
         const val KEY_ACTIVE_PLAYLIST = "active_playlist"
         const val KEY_ROTATION_PAUSED = "rotation_paused"
         const val KEY_ROTATION_TOKEN = "rotation_token"
@@ -639,7 +679,7 @@ class WallpurrRepository(
     }
 }
 
-private fun ZipInputStream.readEntryBytes(maxBytes: Int): ByteArray {
+private fun InputStream.readBoundedBytes(maxBytes: Int): ByteArray {
     val output = ByteArrayOutputStream(minOf(maxBytes, 64 * 1024))
     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
     var total = 0
@@ -647,7 +687,7 @@ private fun ZipInputStream.readEntryBytes(maxBytes: Int): ByteArray {
         val read = read(buffer)
         if (read < 0) break
         total += read
-        require(total <= maxBytes) { "El archivo config.json es demasiado grande" }
+        require(total <= maxBytes) { "El archivo de configuración es demasiado grande" }
         output.write(buffer, 0, read)
     }
     return output.toByteArray()

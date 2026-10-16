@@ -392,6 +392,12 @@ SQLite implementa REPLACE como DELETE + INSERT y las foreign keys `CASCADE` borr
 hijos: imágenes de una carpeta, transforms, items de playlist. Usa insert-ignore + `@Update`
 (`upsert` en los DAOs). REPLACE solo es aceptable en tablas hoja (transforms, items, settings, cursores).
 
+Importar ZIP es atómico desde el punto de vista del usuario: los medios se extraen a
+`cacheDir/import-staging/` con un presupuesto de bytes (espacio libre menos 512 MB), se exige un
+`config.json` válido y solo entonces se mueven a `images/` los archivos nuevos. Un archivo existente
+nunca se sobrescribe (los `storedName` son únicos por medio). Si falla la transacción de Room, se
+eliminan los archivos recién movidos.
+
 ## 16. Cuadrículas y previews
 
 Un player por tile visible es caro. La estrategia actual:
