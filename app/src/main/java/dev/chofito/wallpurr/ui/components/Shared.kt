@@ -213,6 +213,8 @@ fun PurrCard(
     onDismissMenu: () -> Unit = {},
     onRename: () -> Unit = {},
     onDelete: () -> Unit = {},
+    hideLabel: String? = null,
+    onToggleHidden: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     Box(modifier) {
@@ -243,6 +245,15 @@ fun PurrCard(
                         onRename()
                     },
                 )
+                if (hideLabel != null) {
+                    DropdownMenuItem(
+                        text = { Text(hideLabel) },
+                        onClick = {
+                            onDismissMenu()
+                            onToggleHidden()
+                        },
+                    )
+                }
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.delete)) },
                     onClick = {

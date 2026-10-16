@@ -23,6 +23,10 @@ class PlaylistsViewModel(
         viewModelScope.launch { repository.updatePlaylist(id, name = name) }
     }
 
+    fun setHidden(id: String, hidden: Boolean) {
+        viewModelScope.launch { repository.setPlaylistHidden(id, hidden) }
+    }
+
     fun delete(id: String) {
         viewModelScope.launch { rotation.deletePlaylist(id) }
     }

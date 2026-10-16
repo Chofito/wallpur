@@ -79,6 +79,10 @@ class LibraryViewModel(
         viewModelScope.launch { repository.renameFolder(id, name) }
     }
 
+    fun setFolderHidden(id: String, hidden: Boolean) {
+        viewModelScope.launch { repository.setFolderHidden(id, hidden) }
+    }
+
     fun deleteFolder(id: String, onDeleted: () -> Unit = {}) {
         viewModelScope.launch {
             repository.deleteFolder(id)

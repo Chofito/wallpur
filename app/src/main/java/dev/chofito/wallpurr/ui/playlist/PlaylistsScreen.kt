@@ -1,5 +1,6 @@
 package dev.chofito.wallpurr.ui.playlist
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +44,7 @@ import dev.chofito.wallpurr.storage.db.PlaylistEntity
 import dev.chofito.wallpurr.ui.components.EmptyHint
 import dev.chofito.wallpurr.ui.components.HiddenContentLockButton
 import dev.chofito.wallpurr.ui.components.HiddenRevealTitle
+import dev.chofito.wallpurr.ui.components.hiddenContentRevealed
 import dev.chofito.wallpurr.ui.components.IconBubble
 import dev.chofito.wallpurr.ui.components.ImageThumb
 import dev.chofito.wallpurr.ui.components.NameDialog
@@ -59,6 +61,8 @@ fun PlaylistsScreen(
 ) {
     val cards by viewModel.cards.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val revealed = hiddenContentRevealed()
+    val hiddenHint = stringResource(R.string.hidden_hint)
     var showCreate by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<PlaylistEntity?>(null) }
     var menuId by remember { mutableStateOf<String?>(null) }
@@ -100,6 +104,15 @@ fun PlaylistsScreen(
                             name = playlist.name
                         },
                         onDelete = { viewModel.delete(playlist.id) },
+                        hideLabel = stringResource(
+                            if (playlist.hidden) R.string.unhide else R.string.hide_playlist,
+                        ),
+                        onToggleHidden = {
+                            viewModel.setHidden(playlist.id, !playlist.hidden)
+                            if (!playlist.hidden && !revealed) {
+                                Toast.makeText(context, hiddenHint, Toast.LENGTH_LONG).show()
+                            }
+                        },
                         modifier = Modifier.animateItem(),
                     ) {
                         Column {
@@ -108,8 +121,13 @@ fun PlaylistsScreen(
                                     Text(playlist.name, style = MaterialTheme.typography.titleMedium)
                                 },
                                 supportingContent = {
+                                    val hiddenSuffix = if (playlist.hidden) {
+                                        " · " + stringResource(R.string.hidden_badge)
+                                    } else {
+                                        ""
+                                    }
                                     Text(
-                                        "${playlist.intervalMinutes} ${stringResource(R.string.minutes)} · ${wallpaperTargetLabel(playlist.target)}",
+                                        "${playlist.intervalMinutes} ${stringResource(R.string.minutes)} · ${wallpaperTargetLabel(playlist.target)}$hiddenSuffix",
                                     )
                                 },
                                 leadingContent = {

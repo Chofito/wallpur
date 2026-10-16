@@ -1,5 +1,6 @@
 package dev.chofito.wallpurr.ui.library
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -68,6 +69,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chofito.wallpurr.R
 import dev.chofito.wallpurr.ui.components.HiddenContentLockButton
 import dev.chofito.wallpurr.ui.components.HiddenRevealTitle
+import dev.chofito.wallpurr.ui.components.hiddenContentRevealed
 import dev.chofito.wallpurr.storage.MediaKind
 import dev.chofito.wallpurr.storage.WallpurrRepository
 import dev.chofito.wallpurr.storage.db.FolderEntity
@@ -94,6 +96,8 @@ fun LibraryScreen(
     val rootFolderId by viewModel.rootFolderId.collectAsStateWithLifecycle()
     val columns by viewModel.columns.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val hiddenRevealed = hiddenContentRevealed()
+    val hiddenHint = stringResource(R.string.hidden_hint)
     val isTabletWidth = LocalConfiguration.current.screenWidthDp >= TABLET_MIN_WIDTH_DP
     var currentFolderId by rememberSaveable { mutableStateOf<String?>(null) }
     val currentFolder = folders.firstOrNull { it.id == currentFolderId }
@@ -324,6 +328,22 @@ fun LibraryScreen(
                                     text = { Text(stringResource(R.string.rename)) },
                                     onClick = {
                                         openFolderDialog(FolderDialogMode.RENAME, currentFolder.name)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            stringResource(
+                                                if (currentFolder.hidden) R.string.unhide else R.string.hide_folder,
+                                            ),
+                                        )
+                                    },
+                                    onClick = {
+                                        showActionsMenu = false
+                                        viewModel.setFolderHidden(currentFolder.id, !currentFolder.hidden)
+                                        if (!currentFolder.hidden && !hiddenRevealed) {
+                                            Toast.makeText(context, hiddenHint, Toast.LENGTH_LONG).show()
+                                        }
                                     },
                                 )
                                 DropdownMenuItem(
@@ -571,7 +591,14 @@ private fun FolderRow(
                 Text(folder.name, style = MaterialTheme.typography.titleMedium)
             },
             supportingContent = {
-                Text(stringResource(R.string.folder_item_count, count))
+                val countText = stringResource(R.string.folder_item_count, count)
+                Text(
+                    if (folder.hidden) {
+                        "$countText · ${stringResource(R.string.hidden_badge)}"
+                    } else {
+                        countText
+                    },
+                )
             },
             leadingContent = {
                 Box(

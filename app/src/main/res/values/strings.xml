@@ -8,6 +8,11 @@
     <string name="hidden_reveal_title">Mostrar contenido oculto</string>
     <string name="hidden_reveal_subtitle">Confirma que eres tú</string>
     <string name="hidden_lock">Ocultar de nuevo</string>
+    <string name="hide_folder">Ocultar carpeta</string>
+    <string name="hide_playlist">Ocultar playlist</string>
+    <string name="unhide">Dejar de ocultar</string>
+    <string name="hidden_badge">Oculta</string>
+    <string name="hidden_hint">Oculta. Mantén presionado el título de Biblioteca o Playlists para volver a verla.</string>
     <string name="nav_settings">Ajustes</string>
     <string name="import_images">Importar imágenes</string>
     <string name="reset">Reset</string>
