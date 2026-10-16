@@ -2,6 +2,7 @@ package dev.chofito.wallpurr
 
 import android.app.Application
 import androidx.room.Room
+import dev.chofito.wallpurr.storage.HiddenContentGate
 import dev.chofito.wallpurr.storage.ImageFileStore
 import dev.chofito.wallpurr.storage.MediaDerivativeCache
 import dev.chofito.wallpurr.storage.WallpurrRepository
@@ -29,6 +30,9 @@ class WallpurrApplication : Application() {
         container = AppContainer(this)
         container.powerSaveMonitor.start()
         applicationScope.launch { container.rotation.restoreSchedule() }
+        applicationScope.launch {
+            container.repository.observeHiddenAutoLock().collect { container.hiddenGate.policy = it }
+        }
     }
 }
 
@@ -46,7 +50,8 @@ class AppContainer(app: Application) {
 
     val files = ImageFileStore(app)
     val mediaCache = MediaDerivativeCache(app, files)
-    val repository = WallpurrRepository(database, files, mediaCache)
+    val hiddenGate = HiddenContentGate()
+    val repository = WallpurrRepository(database, files, mediaCache, hiddenGate)
     val applier = WallpaperApplier(app, repository, mediaCache)
     val scheduler = WallpaperScheduler(app)
     val notifier = RotationNotifier(app)

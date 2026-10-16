@@ -9,9 +9,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.lifecycleScope
 import dev.chofito.wallpurr.ui.WallpurrApp
 import dev.chofito.wallpurr.ui.theme.WallpurrTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val shareUris = MutableStateFlow<List<Uri>>(emptyList())
@@ -24,6 +26,14 @@ class MainActivity : ComponentActivity() {
             shareUris.value = intent.sharedUris()
         }
         openPlaylistId.value = intent.getStringExtra(EXTRA_OPEN_PLAYLIST_ID)
+        if (Build.VERSION.SDK_INT >= 33) {
+            // While hidden content is revealed, keep it out of the Recents thumbnail.
+            lifecycleScope.launch {
+                (application as WallpurrApplication).container.hiddenGate.revealed.collect {
+                    setRecentsScreenshotEnabled(!it)
+                }
+            }
+        }
         setContent {
             val uris by shareUris.collectAsState()
             val requestedPlaylistId by openPlaylistId.collectAsState()
@@ -39,6 +49,19 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        (application as WallpurrApplication).container.hiddenGate.onAppForegrounded()
+    }
+
+    override fun onStop() {
+        // A rotation recreates the activity; it is not the user leaving the app.
+        if (!isChangingConfigurations) {
+            (application as WallpurrApplication).container.hiddenGate.onAppBackgrounded()
+        }
+        super.onStop()
     }
 
     override fun onNewIntent(intent: Intent) {

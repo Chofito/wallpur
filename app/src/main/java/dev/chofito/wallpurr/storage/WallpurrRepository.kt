@@ -43,15 +43,39 @@ class WallpurrRepository(
     private val db: WallpurrDatabase,
     private val files: ImageFileStore,
     private val mediaCache: MediaDerivativeCache,
+    private val hiddenGate: HiddenContentGate,
     private val json: Json = Json { prettyPrint = true; ignoreUnknownKeys = true },
 ) {
-    val folders: Flow<List<FolderEntity>> = db.folders().observeAll()
-    val playlists: Flow<List<PlaylistEntity>> = db.playlists().observeAll()
-    val images: Flow<List<ImageAssetEntity>> = db.images().observeAll()
+    // Hidden folders and playlists are filtered here, so every screen and picker that lists them
+    // honours the reveal state. Playlist contents are not filtered: a visible playlist shows what
+    // the wallpaper will actually display, and partial lists would corrupt reordering.
+    val folders: Flow<List<FolderEntity>> =
+        combine(db.folders().observeAll(), hiddenGate.revealed) { list, revealed ->
+            if (revealed) list else list.filterNot { it.hidden }
+        }
+    val playlists: Flow<List<PlaylistEntity>> =
+        combine(db.playlists().observeAll(), hiddenGate.revealed) { list, revealed ->
+            if (revealed) list else list.filterNot { it.hidden }
+        }
+    private val allImages: Flow<List<ImageAssetEntity>> = db.images().observeAll()
+
+    /** Library media, without the contents of hidden folders unless they are revealed. */
+    val images: Flow<List<ImageAssetEntity>> = combine(
+        allImages,
+        db.folders().observeAll(),
+        hiddenGate.revealed,
+    ) { list, folderList, revealed ->
+        if (revealed) {
+            list
+        } else {
+            val hiddenFolderIds = folderList.filter { it.hidden }.map { it.id }.toSet()
+            if (hiddenFolderIds.isEmpty()) list else list.filterNot { it.folderId in hiddenFolderIds }
+        }
+    }
     val playlistCards: Flow<List<PlaylistCard>> = combine(
         playlists,
         db.playlistItems().observeAll(),
-        images,
+        allImages,
     ) { lists, items, allImages ->
         val byId = allImages.associateBy { it.id }
         val grouped = items.groupBy { it.playlistId }
@@ -75,7 +99,7 @@ class WallpurrRepository(
     fun playlistItems(playlistId: String): Flow<List<ImageAssetEntity>> =
         combine(
             db.playlistItems().observeItems(playlistId),
-            images,
+            allImages,
         ) { items, all ->
             val byId = all.associateBy { it.id }
             items.mapNotNull { byId[it.imageId] }
@@ -474,6 +498,14 @@ class WallpurrRepository(
             ?: DEFAULT_LIBRARY_COLUMNS
     }
 
+    fun observeHiddenAutoLock(): Flow<HiddenAutoLock> = db.settings().observeAll().map { rows ->
+        HiddenAutoLock.decode(rows.find { it.key == KEY_HIDDEN_AUTO_LOCK }?.value)
+    }
+
+    suspend fun setHiddenAutoLock(policy: HiddenAutoLock) {
+        db.settings().upsert(SettingEntity(KEY_HIDDEN_AUTO_LOCK, policy.encode()))
+    }
+
     fun observePowerSavePolicy(): Flow<PowerSavePolicy> = db.settings().observeAll().map { rows ->
         PowerSavePolicy.from(rows.find { it.key == KEY_POWER_SAVE_POLICY }?.value)
     }
@@ -710,6 +742,7 @@ class WallpurrRepository(
         const val KEY_PLAY_VIDEO_ON_LOCK = "play_video_on_lock"
         const val KEY_CHANGE_ON_HOME_TAP = "change_on_home_tap"
         private const val KEY_POWER_SAVE_POLICY = "power_save_policy"
+        private const val KEY_HIDDEN_AUTO_LOCK = "hidden_auto_lock"
         const val DEFAULT_LIBRARY_COLUMNS = 2
         const val MIN_LIBRARY_COLUMNS = 2
         const val MAX_LIBRARY_COLUMNS = 4
