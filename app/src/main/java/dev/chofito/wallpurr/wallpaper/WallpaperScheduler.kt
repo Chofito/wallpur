@@ -5,6 +5,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 
 class WallpaperScheduler(private val context: Context) {
@@ -21,6 +22,7 @@ class WallpaperScheduler(private val context: Context) {
                     INPUT_ROTATION_TOKEN to rotationToken,
                 ),
             )
+            .addTag(tokenTag(rotationToken))
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             UNIQUE_ONE_SHOT,
@@ -28,6 +30,19 @@ class WallpaperScheduler(private val context: Context) {
             request,
         )
     }
+
+    /**
+     * True while the unique timer created for [rotationToken] is still waiting or running. Lets a
+     * cold process start keep the countdown instead of replacing (and cancelling) the very worker
+     * that may have started the process.
+     */
+    suspend fun hasPendingWork(rotationToken: String): Boolean =
+        WorkManager.getInstance(context)
+            .getWorkInfosForUniqueWorkFlow(UNIQUE_ONE_SHOT)
+            .first()
+            .any { info -> !info.state.isFinished && tokenTag(rotationToken) in info.tags }
+
+    private fun tokenTag(rotationToken: String) = "rotation-token:$rotationToken"
 
     fun cancel() {
         WorkManager.getInstance(context).apply {

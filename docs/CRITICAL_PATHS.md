@@ -79,6 +79,14 @@ Los cambios de miembros (agregar, quitar, borrar medios) **no** reinician el cur
 y dejaba huérfano al worker pendiente, que apunta al medio actual: la rotación se detenía en silencio.
 Reordenar convierte el nuevo orden en ciclo, pero también conserva el medio actual.
 
+Toda mutación de miembros de una playlist debe pasar por
+`RotationController.changePlaylistMembership { ... }`. Solo reprograma el timer si el medio actual
+cambió (por ejemplo, se borró); si no, la cuenta regresiva sigue y solo se refresca la notificación.
+
+`restoreSchedule()` se ejecuta en cada arranque en frío. Si existe un worker pendiente con el token
+actual (tag `rotation-token:<token>`), no se reemplaza: el proceso pudo haberlo levantado ese mismo
+worker, y reemplazarlo cancelaba el cambio y reiniciaba la cuenta.
+
 ## 4. Ownership del wallpaper `Surface`
 
 ### Problema

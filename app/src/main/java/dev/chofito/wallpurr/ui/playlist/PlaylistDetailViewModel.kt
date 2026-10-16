@@ -58,22 +58,25 @@ class PlaylistDetailViewModel(
 
     fun remove(imageId: String) {
         viewModelScope.launch {
-            repository.removeImageFromPlaylist(playlistId, imageId)
-            refreshIfActive()
+            rotation.changePlaylistMembership {
+                repository.removeImageFromPlaylist(playlistId, imageId)
+            }
         }
     }
 
     fun removeMany(imageIds: List<String>) {
         viewModelScope.launch {
-            repository.removeImagesFromPlaylist(playlistId, imageIds)
-            refreshIfActive()
+            rotation.changePlaylistMembership {
+                repository.removeImagesFromPlaylist(playlistId, imageIds)
+            }
         }
     }
 
     fun reorder(imageIds: List<String>) {
         viewModelScope.launch {
-            repository.reorderPlaylist(playlistId, imageIds)
-            refreshIfActive()
+            rotation.changePlaylistMembership {
+                repository.reorderPlaylist(playlistId, imageIds)
+            }
         }
     }
 

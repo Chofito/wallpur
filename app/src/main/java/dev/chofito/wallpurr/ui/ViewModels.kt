@@ -19,7 +19,7 @@ fun libraryViewModel(): LibraryViewModel {
     val container = LocalContext.current.container()
     return viewModel(
         factory = viewModelFactory {
-            initializer { LibraryViewModel(container.repository) }
+            initializer { LibraryViewModel(container.repository, container.rotation) }
         },
     )
 }
@@ -29,7 +29,7 @@ fun shareImportViewModel(): ShareImportViewModel {
     val container = LocalContext.current.container()
     return viewModel(
         factory = viewModelFactory {
-            initializer { ShareImportViewModel(container.repository) }
+            initializer { ShareImportViewModel(container.repository, container.rotation) }
         },
     )
 }

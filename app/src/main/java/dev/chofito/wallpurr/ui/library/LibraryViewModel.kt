@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dev.chofito.wallpurr.storage.WallpurrRepository
 import dev.chofito.wallpurr.storage.db.FolderEntity
 import dev.chofito.wallpurr.storage.db.PlaylistEntity
+import dev.chofito.wallpurr.wallpaper.RotationController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -14,6 +15,7 @@ import kotlinx.coroutines.launch
 
 class LibraryViewModel(
     private val repository: WallpurrRepository,
+    private val rotation: RotationController,
 ) : ViewModel() {
     val images = repository.images
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -39,11 +41,17 @@ class LibraryViewModel(
     }
 
     fun delete(ids: List<String>) {
-        viewModelScope.launch { repository.deleteImages(ids) }
+        viewModelScope.launch {
+            rotation.changePlaylistMembership { repository.deleteImages(ids) }
+        }
     }
 
     fun addToPlaylist(playlist: PlaylistEntity, imageIds: List<String>) {
-        viewModelScope.launch { repository.addImagesToPlaylist(playlist.id, imageIds) }
+        viewModelScope.launch {
+            rotation.changePlaylistMembership {
+                repository.addImagesToPlaylist(playlist.id, imageIds)
+            }
+        }
     }
 
     fun createPlaylistAndAdd(name: String, imageIds: List<String>) {

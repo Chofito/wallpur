@@ -85,7 +85,13 @@ class SettingsViewModel(
 
     fun importConfig(uri: Uri, context: android.content.Context) {
         viewModelScope.launch {
-            runCatching { repository.importConfig(uri, context) }
+            runCatching {
+                repository.importConfig(uri, context).also {
+                    // The import replaces playlists and cursors; the pending timer targets an
+                    // image that may no longer be current.
+                    rotation.applyCurrentAndNotify()
+                }
+            }
                 .onSuccess { result ->
                     message.value = if (result.skippedImages.isEmpty()) {
                         "Importación lista"

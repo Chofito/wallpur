@@ -169,8 +169,41 @@ class RotationController(
             publishNotification()
             return@withLock
         }
-        scheduleCurrentLocked()
+        // Every cold start (including one triggered by the due worker itself) runs this. Replacing
+        // a still-valid timer would restart the countdown and cancel that worker mid-run.
+        val token = container.repository.rotationToken()
+        val hasValidTimer = token != null &&
+            container.repository.nextChangeAtMillis() != null &&
+            container.scheduler.hasPendingWork(token)
+        if (!hasValidTimer) scheduleCurrentLocked()
         publishNotification()
+    }
+
+    /**
+     * Runs a playlist membership change (add, remove or delete media) under the rotation lock.
+     * The pending timer targets the current image, so it is replaced only when the change moved
+     * the current image; otherwise the countdown keeps running and only the notification
+     * (position and count) is refreshed.
+     */
+    suspend fun <T> changePlaylistMembership(block: suspend () -> T): T = commands.withLock {
+        val playlistId = container.repository.activePlaylistId()
+        val before = playlistId?.let { container.repository.currentShuffle(it)?.currentImageId }
+        val result = block()
+        if (playlistId != null && container.repository.activePlaylistId() == playlistId) {
+            val after = container.repository.ensureShuffle(playlistId).currentImageId
+            when {
+                after == before -> publishNotification()
+                after == null -> {
+                    invalidateScheduleLocked()
+                    applyCurrentAndNotifyLocked(playlistId)
+                }
+                else -> {
+                    scheduleCurrentLocked(playlistId, after)
+                    applyCurrentAndNotifyLocked(playlistId)
+                }
+            }
+        }
+        result
     }
 
     suspend fun play() = commands.withLock {
