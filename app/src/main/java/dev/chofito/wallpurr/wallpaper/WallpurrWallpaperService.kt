@@ -1012,7 +1012,7 @@ class WallpurrWallpaperService : WallpaperService() {
                         if (!adopted) {
                             (drawable as? Animatable)?.stop()
                             drawable.callback = null
-                            clearCanvasTransition()
+                            clearCanvasTransitionIfOwned(generation)
                         }
                         if (!backdropAdopted) backdrop?.recycle()
                         rendererTransitionFrame?.recycle()
@@ -1206,7 +1206,7 @@ class WallpurrWallpaperService : WallpaperService() {
                     } finally {
                         if (!adopted) {
                             decoded.recycle()
-                            clearCanvasTransition()
+                            clearCanvasTransitionIfOwned(generation)
                         }
                         if (!backdropAdopted) decodedBackdrop?.recycle()
                         canvasHandoffFrame?.recycle()
@@ -2341,6 +2341,16 @@ class WallpurrWallpaperService : WallpaperService() {
             if (canvasTransitionFrameScheduled || canvasTransitionFrom == null || !surfaceReady) return
             canvasTransitionFrameScheduled = true
             Choreographer.getInstance().postFrameCallback(canvasTransitionFrameCallback)
+        }
+
+        /**
+         * Cleanup for a load that did not commit. A superseded load must not tear down the
+         * transition while a newer load is still in flight: that load may already have retained
+         * or reused the outgoing frame, and clearing it turns its crossfade into a hard cut.
+         * `runningLoads` still counts the calling load here.
+         */
+        private fun clearCanvasTransitionIfOwned(generation: Long) {
+            if (isCurrentLoad(generation) || runningLoads <= 1) clearCanvasTransition()
         }
 
         private fun clearCanvasTransition() {
