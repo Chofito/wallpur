@@ -464,7 +464,8 @@ El switch configura la política; no intenta activar el modo de ahorro del siste
   cache derivada en almacenamiento.
 - Medios animados de cuadrícula sólo cuando están totalmente visibles y el scroll lleva 220 ms
   asentado. Se reproducen como máximo dos en teléfono y uno en anchos de tablet; videos y GIFs
-  comparten ese límite.
+  comparten ese límite. Los `ExoPlayer` de video se reutilizan con `GridVideoPlayerPool` (máx. 2
+  inactivos, liberados tras 20 s sin uso o 15 s con la app en segundo plano).
 - Pulsos, notificación y aplicación estática de lock conflated para absorber ráfagas.
 - EGL/window surface persistente entre tipos de medio cuando no hay efectos.
 - Crossfade sincronizado con `Choreographer`; cero frames programados cuando no hay transición o el

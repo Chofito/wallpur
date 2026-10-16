@@ -1,11 +1,14 @@
 package dev.chofito.wallpurr.ui.components
 
+import android.content.Context
 import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.graphics.drawable.Animatable
 import android.media.MediaPlayer
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.Surface
 import android.view.TextureView
@@ -23,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -99,6 +103,61 @@ fun rememberSettledFullyVisibleKeys(
     return keys
 }
 
+/**
+ * Pool de [ExoPlayer] para los tiles de la cuadrícula. Las cuadrículas desactivan todos los tiles al
+ * hacer scroll y los reactivan ~220 ms después de asentarse; construir un player (hilo, renderers,
+ * decoder por hardware) en cada activación era el coste dominante.
+ *
+ * Es un objeto de aplicación (no un CompositionLocal) porque los tiles viven en varias pantallas y así
+ * no hay que tocar a los llamadores. Solo se usa desde el hilo principal. Los players inactivos se
+ * liberan [IDLE_RELEASE_MS] después de la última devolución, y cada tile devuelve el suyo si la app
+ * queda en segundo plano más de [BACKGROUND_EVICT_MS], así que no se retienen decoders.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+internal object GridVideoPlayerPool {
+    private const val MAX_IDLE = 2
+    internal const val IDLE_RELEASE_MS = 20_000L
+    internal const val BACKGROUND_EVICT_MS = 15_000L
+
+    private val idle = ArrayDeque<ExoPlayer>()
+    private val handler = Handler(Looper.getMainLooper())
+    private val releaseIdle = Runnable { drain() }
+
+    fun acquire(context: Context): ExoPlayer {
+        handler.removeCallbacks(releaseIdle)
+        val player = idle.removeLastOrNull() ?: ExoPlayer.Builder(context.applicationContext).build()
+        return player.apply {
+            volume = 0f
+            repeatMode = Player.REPEAT_MODE_ONE
+        }
+    }
+
+    /** Resetea el player y lo guarda; no lo libera salvo que el pool esté lleno. */
+    fun release(player: ExoPlayer) {
+        runCatching {
+            player.playWhenReady = false
+            player.stop()
+            player.clearMediaItems()
+            player.clearVideoSurface()
+            player.volume = 0f
+        }.onFailure {
+            player.release()
+            return
+        }
+        if (idle.size >= MAX_IDLE) {
+            player.release()
+        } else {
+            idle.addLast(player)
+        }
+        handler.removeCallbacks(releaseIdle)
+        handler.postDelayed(releaseIdle, IDLE_RELEASE_MS)
+    }
+
+    private fun drain() {
+        while (idle.isNotEmpty()) idle.removeFirst().release()
+    }
+}
+
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun MutedGridVideoView(
@@ -108,40 +167,75 @@ fun MutedGridVideoView(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val path = file.absolutePath
-    val player = remember(path) {
-        ExoPlayer.Builder(context.applicationContext).build().apply {
-            volume = 0f
-            repeatMode = Player.REPEAT_MODE_ONE
-            setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)))
-            playWhenReady = true
-            prepare()
+    var player by remember(path) { mutableStateOf<ExoPlayer?>(null) }
+    // La superficie queda invisible (se ve el poster de abajo) hasta que el player renderiza el primer
+    // frame del medio actual, para no mostrar nunca el último frame de un uso anterior del player.
+    var firstFrameRendered by remember(path) { mutableStateOf(false) }
+    DisposableEffect(path, lifecycleOwner) {
+        val handler = Handler(Looper.getMainLooper())
+        var leased: ExoPlayer? = null
+        val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                firstFrameRendered = true
+            }
         }
-    }
-    DisposableEffect(player, lifecycleOwner) {
+        fun attach(startPlaying: Boolean) {
+            if (leased != null) return
+            firstFrameRendered = false
+            val p = GridVideoPlayerPool.acquire(context)
+            p.addListener(listener)
+            p.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(file)))
+            p.playWhenReady = startPlaying
+            p.prepare()
+            leased = p
+            player = p
+        }
+        fun detach() {
+            val p = leased ?: return
+            leased = null
+            player = null
+            firstFrameRendered = false
+            p.removeListener(listener)
+            GridVideoPlayerPool.release(p)
+        }
+        val evict = Runnable { detach() }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> player.play()
-                Lifecycle.Event.ON_STOP -> player.pause()
+                Lifecycle.Event.ON_START -> {
+                    handler.removeCallbacks(evict)
+                    attach(startPlaying = true)
+                    leased?.play()
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    leased?.pause()
+                    handler.postDelayed(evict, GridVideoPlayerPool.BACKGROUND_EVICT_MS)
+                }
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-            player.pause()
-        }
+        val started = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        attach(startPlaying = started)
+        if (!started) handler.postDelayed(evict, GridVideoPlayerPool.BACKGROUND_EVICT_MS)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            player.release()
+            handler.removeCallbacks(evict)
+            detach()
         }
     }
-    ContentFrame(
-        player = player,
-        modifier = modifier.fillMaxSize(),
-        surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
-        contentScale = ContentScale.Crop,
-        keepContentOnReset = true,
-        shutter = {},
-    )
+    val current = player
+    if (current != null) {
+        ContentFrame(
+            player = current,
+            modifier = modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = if (firstFrameRendered) 1f else 0f },
+            surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
+            contentScale = ContentScale.Crop,
+            keepContentOnReset = true,
+            shutter = {},
+        )
+    }
 }
 
 @Composable

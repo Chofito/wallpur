@@ -427,7 +427,11 @@ Un player por tile visible es caro. La estrategia actual:
   vez), para que las grids casi nunca decodifiquen originales;
 - mapa en memoria de miniaturas resueltas (`peekThumbnail`) para dibujar en el primer frame;
 - miniatura persistente acotada en disco y cache de memoria de Coil;
-- liberar player en `onDispose`/`onRelease`.
+- `GridVideoPlayerPool` (MutedPlayback.kt) reutiliza `ExoPlayer` entre activaciones de tiles (máx. 2
+  inactivos; se liberan 20 s tras la última devolución y cada tile devuelve el suyo tras 15 s en
+  segundo plano). Al devolver: stop, clearMediaItems, clearVideoSurface, volumen 0; la superficie
+  queda invisible hasta `onRenderedFirstFrame` del medio actual;
+- devolver el player al pool en `onDispose` y liberar `MediaPlayer`/GIF en `onRelease`.
 
 No reproduzcas todos los videos de la lista fuera del viewport aunque otras apps parezcan hacerlo; esas apps usan pools, prefetch y pipelines especializados.
 
