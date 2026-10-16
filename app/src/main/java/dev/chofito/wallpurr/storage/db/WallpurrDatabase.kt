@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SettingEntity::class,
     ],
     version = 4,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class WallpurrDatabase : RoomDatabase() {
     abstract fun folders(): FolderDao
