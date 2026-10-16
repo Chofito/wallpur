@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
@@ -65,8 +66,24 @@ fun WallpurrApp(
         }
     }
     val nav = rememberNavController()
+    val container = LocalContext.current.container()
+    LaunchedEffect(Unit) {
+        // Leaving a hidden playlist, or media opened from it, on screen would defeat hiding it.
+        var wasRevealed = container.hiddenGate.revealed.value
+        container.hiddenGate.revealed.collect { revealed ->
+            if (wasRevealed && !revealed && nav.currentBackStackEntry?.destination?.route != "tabs") {
+                nav.popBackStack("tabs", inclusive = false)
+            }
+            wasRevealed = revealed
+        }
+    }
     LaunchedEffect(openPlaylistId) {
         val playlistId = openPlaylistId?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        val hiddenPlaylist = container.repository.getPlaylist(playlistId)?.hidden == true
+        if (hiddenPlaylist && !container.hiddenGate.revealed.value) {
+            onOpenPlaylistConsumed()
+            return@LaunchedEffect
+        }
         val currentEntry = nav.currentBackStackEntry
         val alreadyOpen = currentEntry?.destination?.route == "playlist/{playlistId}" &&
             currentEntry.arguments?.getString("playlistId") == playlistId

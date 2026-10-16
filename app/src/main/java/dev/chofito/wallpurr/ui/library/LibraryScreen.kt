@@ -66,6 +66,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chofito.wallpurr.R
+import dev.chofito.wallpurr.ui.components.HiddenContentLockButton
+import dev.chofito.wallpurr.ui.components.HiddenRevealTitle
 import dev.chofito.wallpurr.storage.MediaKind
 import dev.chofito.wallpurr.storage.WallpurrRepository
 import dev.chofito.wallpurr.storage.db.FolderEntity
@@ -181,13 +183,12 @@ fun LibraryScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        when {
-                            mode != PhotoMode.Browse -> stringResource(R.string.selected_count, selected.size)
-                            currentFolder != null -> currentFolder.name
-                            else -> stringResource(R.string.nav_library)
-                        },
-                    )
+                    when {
+                        mode != PhotoMode.Browse ->
+                            Text(stringResource(R.string.selected_count, selected.size))
+                        currentFolder != null -> Text(currentFolder.name)
+                        else -> HiddenRevealTitle(stringResource(R.string.nav_library))
+                    }
                 },
                 navigationIcon = {
                     if (mode != PhotoMode.Browse || currentFolderId != null) {
@@ -276,6 +277,7 @@ fun LibraryScreen(
                             Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.delete))
                         }
                     } else {
+                        HiddenContentLockButton()
                         IconButton(onClick = { showColumnsMenu = true }) {
                             Icon(
                                 Icons.Outlined.GridView,

@@ -41,6 +41,8 @@ import dev.chofito.wallpurr.R
 import dev.chofito.wallpurr.storage.PlaylistCard
 import dev.chofito.wallpurr.storage.db.PlaylistEntity
 import dev.chofito.wallpurr.ui.components.EmptyHint
+import dev.chofito.wallpurr.ui.components.HiddenContentLockButton
+import dev.chofito.wallpurr.ui.components.HiddenRevealTitle
 import dev.chofito.wallpurr.ui.components.IconBubble
 import dev.chofito.wallpurr.ui.components.ImageThumb
 import dev.chofito.wallpurr.ui.components.NameDialog
@@ -64,7 +66,12 @@ fun PlaylistsScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_playlists)) }) },
+        topBar = {
+            TopAppBar(
+                title = { HiddenRevealTitle(stringResource(R.string.nav_playlists)) },
+                actions = { HiddenContentLockButton() },
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { showCreate = true },

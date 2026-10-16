@@ -5,6 +5,9 @@
     <string name="library_grid_columns">Columnas de la biblioteca</string>
     <string name="library_grid_columns_value">%1$d por fila</string>
     <string name="nav_playlists">Playlists</string>
+    <string name="hidden_reveal_title">Mostrar contenido oculto</string>
+    <string name="hidden_reveal_subtitle">Confirma que eres tú</string>
+    <string name="hidden_lock">Ocultar de nuevo</string>
     <string name="nav_settings">Ajustes</string>
     <string name="import_images">Importar imágenes</string>
     <string name="reset">Reset</string>
