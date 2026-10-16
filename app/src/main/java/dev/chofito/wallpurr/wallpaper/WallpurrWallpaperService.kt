@@ -218,11 +218,13 @@ class WallpurrWallpaperService : WallpaperService() {
                 return@Runnable
             }
             orientationReloadRunning = true
+            logOrientation("orientationReload start target=$orientation")
             scope.launch {
                 try {
                     loadCurrent(orientation)
                 } finally {
                     orientationReloadRunning = false
+                    logOrientation("orientationReload end target=$orientation")
                     scheduleOrientationReloadIfNeeded()
                 }
             }
@@ -319,6 +321,7 @@ class WallpurrWallpaperService : WallpaperService() {
             }
             surfaceWidth = width
             surfaceHeight = height
+            logOrientation("surfaceChanged requested=$requestedOrientation")
             if (!surfaceReady) return
             if (!observeOrientation(requestedOrientation)) {
                 if (orientationReloadRunning) loadGeneration += 1
@@ -349,6 +352,7 @@ class WallpurrWallpaperService : WallpaperService() {
         override fun onSurfaceRedrawNeeded(holder: SurfaceHolder) {
             super.onSurfaceRedrawNeeded(holder)
             val requestedOrientation = currentDeviceOrientation(surfaceWidth, surfaceHeight)
+            logOrientation("surfaceRedrawNeeded requested=$requestedOrientation")
             if (!observeOrientation(requestedOrientation)) return
             redrawLoadedMediaForViewport()
         }
@@ -372,11 +376,34 @@ class WallpurrWallpaperService : WallpaperService() {
         }
 
         internal fun onDeviceConfigurationChanged(orientation: ScreenOrientation) {
+            logOrientation("configurationChanged orientation=$orientation")
             if (!surfaceReady) return
             if (loadedOrientation != null && loadedOrientation != orientation) {
                 videoRenderer?.prepareForLayoutChange()
             }
             if (observeOrientation(orientation)) redrawLoadedMediaForViewport()
+        }
+
+        /**
+         * Rotation diagnostics. The engine reconciles three signals that can disagree during a
+         * tablet rotation, especially on the lock screen: the process Configuration, the
+         * SurfaceHolder size and the EGL/Canvas buffer size. One line per event makes the
+         * disagreement visible: `adb logcat -s WallpurrOrient WallpurrOrientGL`.
+         */
+        private fun logOrientation(event: String) {
+            val keyguardLocked = applicationContext
+                .getSystemService(KeyguardManager::class.java)
+                ?.isKeyguardLocked == true
+            Log.d(
+                ORIENTATION_TAG,
+                "$event | config=${resources.configuration.screenOrientationOrNull()} " +
+                    "surface=${surfaceWidth}x$surfaceHeight desired=$desiredOrientation " +
+                    "loaded=$loadedOrientation loadedViewport=${loadedViewportWidth}x" +
+                    "$loadedViewportHeight kind=$kind canvas=$allowCanvas egl=$videoOwnsSurface " +
+                    "holdingTransition=${canvasTransitionFrom != null} visible=$visible " +
+                    "keyguard=$keyguardLocked flags=${destinationFlags()} " +
+                    "reload(scheduled=$orientationReloadScheduled running=$orientationReloadRunning)",
+            )
         }
 
         private fun observeOrientation(orientation: ScreenOrientation): Boolean {
@@ -432,6 +459,7 @@ class WallpurrWallpaperService : WallpaperService() {
         override fun onVisibilityChanged(isVisible: Boolean) {
             super.onVisibilityChanged(isVisible)
             visible = isVisible
+            logOrientation("visibilityChanged")
             if (isVisible && applicationContext
                     .getSystemService(KeyguardManager::class.java)
                     ?.isKeyguardLocked == true
@@ -2292,6 +2320,9 @@ class WallpurrWallpaperService : WallpaperService() {
                 scheduleFirstFrameRetry()
                 return
             }
+            if (canvas.width != surfaceWidth || canvas.height != surfaceHeight) {
+                logOrientation("canvasBufferMismatch buffer=${canvas.width}x${canvas.height}")
+            }
             var drewFrame = false
             try {
                 val outgoing = canvasTransitionFrom
@@ -2529,6 +2560,7 @@ class WallpurrWallpaperService : WallpaperService() {
 
     private companion object {
         const val TAG = "WallpurrWallpaper"
+        const val ORIENTATION_TAG = "WallpurrOrient"
         val RENDERER_RELOAD_BACKOFF_MS = longArrayOf(250L, 1_000L)
         const val MAX_VIDEO_RETRIES = 3
         const val VIDEO_RETRY_DELAY_MS = 200L

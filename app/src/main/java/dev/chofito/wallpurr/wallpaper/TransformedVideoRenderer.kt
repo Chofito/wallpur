@@ -272,6 +272,11 @@ internal class TransformedVideoRenderer(
                 updatePositions()
                 updateBackdropTexture(backdrop, clearWhenMissing = replaceBackdrop)
                 if (deferUntilSurfaceMatches) {
+                    Log.d(
+                        ORIENTATION_TAG,
+                        "bitmapLayout deferred egl=${eglSurfaceSize()} " +
+                            "requested=${viewportWidth}x$viewportHeight expected=$expectedOrientation",
+                    )
                     presentLayoutHoldingFrameIfNeeded()
                     scheduleViewportReconciliation()
                     return@post
@@ -1540,6 +1545,13 @@ internal class TransformedVideoRenderer(
                             SURFACE_ORIENTATION_WAIT_MS
                         val mayUseStableSurfaceFallback =
                             layoutTargetOrientation == null && waitExpired
+                        Log.d(
+                            ORIENTATION_TAG,
+                            "reconcile delay=${delayMs}ms egl=${actual.first}x${actual.second} " +
+                                "target=${layoutTargetViewportWidth}x$layoutTargetViewportHeight " +
+                                "targetOrientation=$layoutTargetOrientation matches=$surfaceMatches " +
+                                "waitExpired=$waitExpired",
+                        )
                         if (!surfaceMatches && !mayUseStableSurfaceFallback) {
                             // Samsung updates BLAST/SurfaceHolder before EGL observes the new
                             // window-buffer generation. Swap the retained frame again to dequeue
@@ -1823,6 +1835,7 @@ internal class TransformedVideoRenderer(
 
     private companion object {
         const val TAG = "WallpurrVideoGL"
+        const val ORIENTATION_TAG = "WallpurrOrientGL"
         const val NO_VIDEO_SESSION = Long.MIN_VALUE
         const val VIEWPORT_WATCH_DURATION_MS = 2_000L
         const val SURFACE_ORIENTATION_WAIT_MS = 500L
