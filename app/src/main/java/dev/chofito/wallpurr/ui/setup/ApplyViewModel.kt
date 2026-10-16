@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import dev.chofito.wallpurr.wallpaper.ApplyResult
 import dev.chofito.wallpurr.wallpaper.RotationController
 import dev.chofito.wallpurr.wallpaper.WallpaperApplier
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -38,20 +39,32 @@ class ApplyViewModel(
 
     fun applyLock() {
         viewModelScope.launch {
-            activate(refreshStaticLock = false)
-            message.value = when (val result = applier.applyLockStatic()) {
-                ApplyResult.Ok -> "Fondo de bloqueo actualizado"
-                is ApplyResult.Error -> result.message
+            message.value = try {
+                activate(refreshStaticLock = false)
+                when (val result = applier.applyLockStatic()) {
+                    ApplyResult.Ok -> "Fondo de bloqueo actualizado"
+                    is ApplyResult.Error -> result.message.ifBlank { "No se pudo aplicar el fondo de bloqueo" }
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                error.message?.takeIf { it.isNotBlank() } ?: "No se pudo aplicar el fondo de bloqueo"
             }
         }
     }
 
     fun applyHomeStatic() {
         viewModelScope.launch {
-            activate(refreshStaticLock = false)
-            message.value = when (val result = applier.applyHomeStaticFallback()) {
-                ApplyResult.Ok -> "Fondo de inicio estático aplicado"
-                is ApplyResult.Error -> result.message
+            message.value = try {
+                activate(refreshStaticLock = false)
+                when (val result = applier.applyHomeStaticFallback()) {
+                    ApplyResult.Ok -> "Fondo de inicio estático aplicado"
+                    is ApplyResult.Error -> result.message.ifBlank { "No se pudo aplicar el fondo de inicio" }
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Exception) {
+                error.message?.takeIf { it.isNotBlank() } ?: "No se pudo aplicar el fondo de inicio"
             }
         }
     }
