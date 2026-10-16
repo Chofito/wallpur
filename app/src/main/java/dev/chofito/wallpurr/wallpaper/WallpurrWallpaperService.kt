@@ -111,6 +111,8 @@ class WallpurrWallpaperService : WallpaperService() {
         // Consecutive renderer failures for one image; bounds the release -> reload loop.
         private var rendererFailureImageId: String? = null
         private var rendererFailureCount = 0
+        // Last video that failed for good; see advanceAfterTerminalVideoFailure.
+        private var terminalVideoFailureImageId: String? = null
         private val handler = Handler(Looper.getMainLooper())
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         private val transitionPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -1442,6 +1444,7 @@ class WallpurrWallpaperService : WallpaperService() {
                             !surfaceReady
                         ) return@presented
                         videoFramePresented = true
+                        terminalVideoFailureImageId = null
                         rendererFailureCount = 0
                         rendererShowsBitmap = false
                         rendererBitmapPending = false
@@ -1524,6 +1527,7 @@ class WallpurrWallpaperService : WallpaperService() {
                         !surfaceReady
                     ) return@presented
                     videoFramePresented = true
+                    terminalVideoFailureImageId = null
                     rendererFailureCount = 0
                     rendererShowsBitmap = false
                     rendererBitmapPending = false
@@ -1755,7 +1759,7 @@ class WallpurrWallpaperService : WallpaperService() {
             val brokenRenderer = videoRenderer
             videoRenderer = null
             videoInputSurface = null
-            val retry = {
+            val retry: () -> Unit = {
                 if (transient && consecutiveVideoErrors < MAX_VIDEO_RETRIES) {
                     consecutiveVideoErrors += 1
                     Log.w(TAG, "Retrying video wallpaper ($consecutiveVideoErrors/$MAX_VIDEO_RETRIES)")
@@ -1768,9 +1772,29 @@ class WallpurrWallpaperService : WallpaperService() {
                             startVideo(file, image)
                         }
                     }, VIDEO_RETRY_DELAY_MS)
+                } else {
+                    advanceAfterTerminalVideoFailure(image)
                 }
             }
             releaseRenderer(brokenRenderer, retry)
+        }
+
+        /**
+         * A TIMES-mode video advances only from its completion listener; the controller schedules
+         * no timer for it. A video that can never play would therefore stall the playlist forever.
+         * Advance after a short pause, but only once per image until a video frame is presented,
+         * so a single-item playlist with a broken video does not reload in a loop.
+         */
+        private fun advanceAfterTerminalVideoFailure(image: ImageAssetEntity) {
+            if (VideoPlayMode.from(image.videoPlayMode) != VideoPlayMode.TIMES) return
+            if (terminalVideoFailureImageId == image.id) return
+            terminalVideoFailureImageId = image.id
+            Log.w(TAG, "Video ${image.id} cannot be played; advancing the playlist")
+            handler.postDelayed({
+                if (surfaceReady && loadedImageId == image.id) {
+                    scope.launch { advanceExpected(image.id) }
+                }
+            }, TERMINAL_VIDEO_ADVANCE_DELAY_MS)
         }
 
         private fun attachVideoDisplay(
@@ -2624,6 +2648,7 @@ class WallpurrWallpaperService : WallpaperService() {
         const val VIDEO_RETRY_DELAY_MS = 200L
         const val MIN_BITMAP_DECODE_SIDE = 1080
         const val SOFTWARE_BLUR_DECODE_SIDE = 1600
+        const val TERMINAL_VIDEO_ADVANCE_DELAY_MS = 3_000L
         const val INITIAL_DESTINATION_RECONCILE_MS = 600L
         const val MAX_FIRST_FRAME_RETRIES = 3
         const val FIRST_FRAME_RETRY_DELAY_MS = 80L
