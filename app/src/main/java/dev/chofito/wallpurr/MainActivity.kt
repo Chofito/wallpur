@@ -51,6 +51,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Deprecated("Overridden only to observe launches; callers use Activity Result APIs.")
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+        // startActivity() and every ActivityResult launcher end up here.
+        (application as WallpurrApplication).container.hiddenGate.expectExternalActivity()
+        @Suppress("DEPRECATION")
+        super.startActivityForResult(intent, requestCode, options)
+    }
+
     override fun onStart() {
         super.onStart()
         (application as WallpurrApplication).container.hiddenGate.onAppForegrounded()

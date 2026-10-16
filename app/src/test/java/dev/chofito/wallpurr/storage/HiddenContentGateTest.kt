@@ -59,6 +59,40 @@ class HiddenContentGateTest {
     }
 
     @Test
+    fun onLeaveSurvivesAShortTripToAnActivityTheAppOpened() {
+        gate.policy = HiddenAutoLock.OnLeave
+        gate.reveal()
+        gate.expectExternalActivity()
+        clock += 500
+        gate.onAppBackgrounded()
+        assertTrue(gate.revealed.value)
+        clock += 60_000L
+        gate.onAppForegrounded()
+        assertTrue(gate.revealed.value)
+    }
+
+    @Test
+    fun onLeaveHidesAfterALongTripToAnActivityTheAppOpened() {
+        gate.policy = HiddenAutoLock.OnLeave
+        gate.reveal()
+        gate.expectExternalActivity()
+        gate.onAppBackgrounded()
+        clock += 5 * 60_000L
+        gate.onAppForegrounded()
+        assertFalse(gate.revealed.value)
+    }
+
+    @Test
+    fun staleExternalActivityExpectationDoesNotExcuseLeaving() {
+        gate.policy = HiddenAutoLock.OnLeave
+        gate.reveal()
+        gate.expectExternalActivity()
+        clock += 30_000L
+        gate.onAppBackgrounded()
+        assertFalse(gate.revealed.value)
+    }
+
+    @Test
     fun policyRoundTripsAndFallsBackToOnLeave() {
         listOf(HiddenAutoLock.OnLeave, HiddenAutoLock.Manual, HiddenAutoLock.AfterMinutes(15))
             .forEach { assertEquals(it, HiddenAutoLock.decode(it.encode())) }

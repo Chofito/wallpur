@@ -55,6 +55,8 @@ class HiddenContentGate(
     var policy: HiddenAutoLock = HiddenAutoLock.OnLeave
 
     private var backgroundedAtMs: Long? = null
+    private var externalActivityAtMs: Long? = null
+    private var backgroundedForExternalActivity = false
 
     fun reveal() {
         backgroundedAtMs = null
@@ -66,11 +68,31 @@ class HiddenContentGate(
         _revealed.value = false
     }
 
+    /**
+     * Wallpurr is about to open another activity itself: a picker, the live wallpaper chooser or
+     * a system settings screen. Being stopped for it is not the user leaving the app, so
+     * [HiddenAutoLock.OnLeave] waits up to [EXTERNAL_ACTIVITY_GRACE_MS] instead of hiding at once.
+     */
+    fun expectExternalActivity() {
+        externalActivityAtMs = now()
+    }
+
     fun onAppBackgrounded() {
+        val expectedAt = externalActivityAtMs
+        externalActivityAtMs = null
         if (!_revealed.value) return
+        val external = expectedAt != null && now() - expectedAt <= EXTERNAL_ACTIVITY_WINDOW_MS
         when (policy) {
-            HiddenAutoLock.OnLeave -> hide()
-            is HiddenAutoLock.AfterMinutes -> backgroundedAtMs = now()
+            HiddenAutoLock.OnLeave -> if (external) {
+                backgroundedAtMs = now()
+                backgroundedForExternalActivity = true
+            } else {
+                hide()
+            }
+            is HiddenAutoLock.AfterMinutes -> {
+                backgroundedAtMs = now()
+                backgroundedForExternalActivity = external
+            }
             HiddenAutoLock.Manual -> Unit
         }
     }
@@ -78,9 +100,21 @@ class HiddenContentGate(
     fun onAppForegrounded() {
         val leftAt = backgroundedAtMs ?: return
         backgroundedAtMs = null
-        val current = policy
-        if (current is HiddenAutoLock.AfterMinutes && now() - leftAt >= current.minutes * 60_000L) {
-            hide()
+        val limitMs = when (val current = policy) {
+            HiddenAutoLock.OnLeave -> EXTERNAL_ACTIVITY_GRACE_MS
+            is HiddenAutoLock.AfterMinutes -> {
+                val policyMs = current.minutes * 60_000L
+                if (backgroundedForExternalActivity) maxOf(policyMs, EXTERNAL_ACTIVITY_GRACE_MS) else policyMs
+            }
+            HiddenAutoLock.Manual -> return
         }
+        backgroundedForExternalActivity = false
+        if (now() - leftAt >= limitMs) hide()
+    }
+
+    private companion object {
+        // How soon after expectExternalActivity() the stop must arrive to be attributed to it.
+        const val EXTERNAL_ACTIVITY_WINDOW_MS = 5_000L
+        const val EXTERNAL_ACTIVITY_GRACE_MS = 5 * 60_000L
     }
 }
