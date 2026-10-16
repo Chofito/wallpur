@@ -112,7 +112,7 @@ JSON y ZIP no están cifrados por Wallpurr. Su privacidad depende de la ubicaci�
 
 Room tiene migraciones hasta v4, pero el upgrade desde todas las versiones anteriores necesita validación explícita sobre bases reales. Una instalación limpia no prueba migraciones.
 
-Android Auto Backup puede restaurar archivos/base en momentos diferentes; faltantes se deben tratar como medios no disponibles, no recrear desde rutas originales.
+Auto Backup de Android está configurado para **excluir** `filesDir/images/` y la base Room (`wallpurr.db`, `-wal`, `-shm`) tanto del backup en la nube como de la transferencia entre dispositivos (`res/xml/backup_rules.xml` y `data_extraction_rules.xml`). Motivo: los medios superan con facilidad la cuota de 25 MB y una restauración podría traer filas de la base sin sus archivos. Toda la configuración (ajustes, playlists, estilos) vive en esa misma base, así que al reinstalar o cambiar de teléfono Wallpurr arranca vacío. La exportación ZIP desde Ajustes es el backup completo real; el usuario debe usarla antes de migrar. Los medios faltantes por cualquier otra causa se tratan como no disponibles, sin recrearlos desde rutas originales.
 
 ## Ahorro de energía
 

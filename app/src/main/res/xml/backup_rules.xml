@@ -1,13 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Android 11 and lower (and API 28-30 full backup). Wallpurr's state is a Room database
+   plus media in filesDir/images that must stay consistent with each other. The media easily
+   exceeds the 25 MB cloud quota, and restoring database rows without their files would leave
+   dangling references, so neither is backed up. The in-app ZIP export is the full backup.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="file" path="images" />
+    <exclude domain="database" path="wallpurr.db" />
+    <exclude domain="database" path="wallpurr.db-wal" />
+    <exclude domain="database" path="wallpurr.db-shm" />
 </full-backup-content>

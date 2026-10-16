@@ -1,19 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Android 12+. See backup_rules.xml: media (filesDir/images) and the Room database are
+   excluded from cloud backup and device transfer so a restore never brings database rows
+   without their files. Users move their data with the in-app ZIP export/import.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="file" path="images" />
+        <exclude domain="database" path="wallpurr.db" />
+        <exclude domain="database" path="wallpurr.db-wal" />
+        <exclude domain="database" path="wallpurr.db-shm" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="file" path="images" />
+        <exclude domain="database" path="wallpurr.db" />
+        <exclude domain="database" path="wallpurr.db-wal" />
+        <exclude domain="database" path="wallpurr.db-shm" />
     </device-transfer>
-    -->
 </data-extraction-rules>
