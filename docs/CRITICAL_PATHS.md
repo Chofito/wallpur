@@ -387,6 +387,11 @@ Checklist:
 
 Si falta uno, puede compilar y aun así perder datos, fallar al abrir o importar configuración incompleta.
 
+Nunca uses `OnConflictStrategy.REPLACE` sobre una tabla padre (`folders`, `playlists`, `images`).
+SQLite implementa REPLACE como DELETE + INSERT y las foreign keys `CASCADE` borran en silencio los
+hijos: imágenes de una carpeta, transforms, items de playlist. Usa insert-ignore + `@Update`
+(`upsert` en los DAOs). REPLACE solo es aceptable en tablas hoja (transforms, items, settings, cursores).
+
 ## 16. Cuadrículas y previews
 
 Un player por tile visible es caro. La estrategia actual:

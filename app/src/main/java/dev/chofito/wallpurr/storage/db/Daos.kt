@@ -16,8 +16,18 @@ interface FolderDao {
     @Query("SELECT * FROM folders WHERE id = :id")
     suspend fun get(id: String): FolderEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(folder: FolderEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(folder: FolderEntity): Long
+
+    @Update
+    suspend fun update(folder: FolderEntity)
+
+    // Never REPLACE a parent row: SQLite implements it as DELETE + INSERT, and the CASCADE foreign
+    // keys would silently delete every image (and its transforms/playlist items) in the folder.
+    @Transaction
+    suspend fun upsert(folder: FolderEntity) {
+        if (insert(folder) == -1L) update(folder)
+    }
 
     @Query("DELETE FROM folders WHERE id = :id")
     suspend fun delete(id: String)
@@ -90,11 +100,17 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE id = :id")
     fun observe(id: String): Flow<PlaylistEntity?>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(playlist: PlaylistEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(playlist: PlaylistEntity): Long
 
     @Update
     suspend fun update(playlist: PlaylistEntity)
+
+    // See FolderDao.upsert: REPLACE would cascade-delete every item of the playlist.
+    @Transaction
+    suspend fun upsert(playlist: PlaylistEntity) {
+        if (insert(playlist) == -1L) update(playlist)
+    }
 
     @Query("DELETE FROM playlists WHERE id = :id")
     suspend fun delete(id: String)
