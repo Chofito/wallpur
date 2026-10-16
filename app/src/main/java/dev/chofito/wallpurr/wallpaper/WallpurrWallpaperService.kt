@@ -2023,7 +2023,8 @@ class WallpurrWallpaperService : WallpaperService() {
         private suspend fun detachCanvasTransitionForRenderer(
             expectedLoadGeneration: Long,
         ): Bitmap? {
-            val frame = captureCanvasOutputForTransition() ?: return null
+            // The EGL renderer draws this frame as-is, so the lock style must be baked into it.
+            val frame = captureCanvasOutputForTransition(bakeLockStyle = true) ?: return null
             if (!isCurrentLoad(expectedLoadGeneration) || !transitionsAllowed()) {
                 frame.recycle()
                 return null
@@ -2034,6 +2035,7 @@ class WallpurrWallpaperService : WallpaperService() {
 
         private suspend fun captureCanvasOutputForTransition(
             captureCurrentSceneOnly: Boolean = false,
+            bakeLockStyle: Boolean = !styleTransitionsAtDrawTime(),
         ): Bitmap? {
             if (!surfaceReady || !allowCanvas || videoOwnsSurface || !transitionsAllowed()) {
                 return null
@@ -2060,12 +2062,15 @@ class WallpurrWallpaperService : WallpaperService() {
                     )
                 }
                 transitionPaint.alpha = 255
-                return output
-            }
-            canvas.drawColor(Color.BLACK)
-            if (!drawMedia(canvas)) {
-                output.recycle()
-                return null
+                // Transition bitmaps are already styled unless the style is applied at draw time.
+                if (!bakeLockStyle || !styleTransitionsAtDrawTime()) return output
+            } else {
+                canvas.drawColor(Color.BLACK)
+                if (!drawMedia(canvas)) {
+                    output.recycle()
+                    return null
+                }
+                if (!bakeLockStyle) return output
             }
             val style = transitionLockStyle()
             return try {
@@ -2126,7 +2131,7 @@ class WallpurrWallpaperService : WallpaperService() {
                 clearCanvasTransition()
                 return
             }
-            val style = transitionLockStyle()
+            val style = if (styleTransitionsAtDrawTime()) LockStyle.None else transitionLockStyle()
             val styled = try {
                 styleTransitionBitmap(
                     source = target,
@@ -2329,15 +2334,8 @@ class WallpurrWallpaperService : WallpaperService() {
                 if (outgoing != null && !outgoing.isRecycled) {
                     val target = canvasTransitionTarget
                     if (target != null && !target.isRecycled) {
-                        canvas.drawColor(Color.BLACK)
-                        drawTransitionBitmap(canvas, outgoing, alpha = 255)
                         val progress = canvasTransitionProgress()
-                        drawTransitionBitmap(
-                            canvas,
-                            target,
-                            alpha = (progress * 255f).toInt(),
-                        )
-                        transitionPaint.alpha = 255
+                        drawTransitionScene(canvas, outgoing, target, progress, style)
                         drewFrame = true
                         if (progress < 1f) {
                             scheduleCanvasTransitionFrame()
@@ -2349,8 +2347,7 @@ class WallpurrWallpaperService : WallpaperService() {
                         // Orientation/profile work may still be decoding its backdrop. Publish the
                         // retained scene as a center-crop holding frame instead of redrawing the old
                         // transform into the new viewport (which creates a side band/stretch step).
-                        canvas.drawColor(Color.BLACK)
-                        drawTransitionBitmap(canvas, outgoing, alpha = 255)
+                        drawTransitionScene(canvas, outgoing, target = null, progress = 0f, style = style)
                         drewFrame = true
                     }
                 } else {
@@ -2376,6 +2373,43 @@ class WallpurrWallpaperService : WallpaperService() {
                     scheduleFirstFrameRetry()
                 }
             }
+        }
+
+        /**
+         * On Android 12+ transition bitmaps stay unstyled and the lock style is applied here, on
+         * the GPU, exactly like the stable frame. Pre-blurring both crossfade bitmaps on the CPU
+         * at full size took 3.5–5 s per rotation on a Galaxy Tab S9 while locked, which delayed
+         * the whole orientation reload.
+         */
+        private fun styleTransitionsAtDrawTime(): Boolean =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+        private fun drawTransitionScene(
+            canvas: Canvas,
+            outgoing: Bitmap,
+            target: Bitmap?,
+            progress: Float,
+            style: LockStyle,
+        ) {
+            val drawScene = { sceneCanvas: Canvas ->
+                sceneCanvas.drawColor(Color.BLACK)
+                drawTransitionBitmap(sceneCanvas, outgoing, alpha = 255)
+                if (target != null) {
+                    drawTransitionBitmap(sceneCanvas, target, alpha = (progress * 255f).toInt())
+                }
+                transitionPaint.alpha = 255
+                true
+            }
+            if (!styleTransitionsAtDrawTime()) {
+                drawScene(canvas)
+                return
+            }
+            val drew = if (style.blurRadius > 0 && canvas.isHardwareAccelerated) {
+                drawHardwareBlurredScene(canvas, style, drawScene)
+            } else {
+                drawScene(canvas)
+            }
+            if (drew && style.visualDarkness > 0.001f) drawCanvasDarkness(canvas, style)
         }
 
         private fun drawTransitionBitmap(canvas: Canvas, source: Bitmap, alpha: Int) {
@@ -2508,6 +2542,30 @@ class WallpurrWallpaperService : WallpaperService() {
                 radiusPx = radiusPx,
                 cacheFrame = staticSource != null,
                 drawMedia = ::drawMedia,
+            )
+        }
+
+        private fun drawHardwareBlurredScene(
+            canvas: Canvas,
+            style: LockStyle,
+            drawScene: (Canvas) -> Boolean,
+        ): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return drawScene(canvas)
+            val radiusPx = minOf(
+                style.visualBlurRadiusDp * resources.displayMetrics.density,
+                MAX_LOCK_BLUR_RADIUS_PX.toFloat(),
+            )
+            val cache = (hardwareBlurCache as? HardwareBlurCache) ?: HardwareBlurCache().also {
+                hardwareBlurCache = it
+            }
+            return cache.draw(
+                canvas = canvas,
+                source = null,
+                transform = transform,
+                blurLevel = style.blurRadius,
+                radiusPx = radiusPx,
+                cacheFrame = false,
+                drawMedia = drawScene,
             )
         }
 
