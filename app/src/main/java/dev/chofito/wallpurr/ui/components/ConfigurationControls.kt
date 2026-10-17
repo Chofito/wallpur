@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.chofito.wallpurr.R
 import dev.chofito.wallpurr.storage.HiddenAutoLock
@@ -137,11 +138,14 @@ fun HiddenAutoLockSelector(
         )
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             options.forEachIndexed { index, (option, label) ->
+                // Three segments are ~90 dp wide on a phone: no check icon and a single line, so
+                // the labels fit; the selected segment is already marked by its fill.
                 SegmentedButton(
                     selected = policy::class == option::class,
                     onClick = { onSelect(option) },
                     shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                    label = { Text(label) },
+                    icon = {},
+                    label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 )
             }
         }

@@ -21,7 +21,7 @@
     <string name="hidden_auto_lock_title">Volver a ocultar</string>
     <string name="hidden_auto_lock_hint">Cuándo desaparecen otra vez las carpetas y playlists ocultas</string>
     <string name="hidden_auto_lock_on_leave">Al salir</string>
-    <string name="hidden_auto_lock_after">Tras minutos</string>
+    <string name="hidden_auto_lock_after">Minutos</string>
     <string name="hidden_auto_lock_manual">Manual</string>
     <string name="hidden_auto_lock_minutes">%1$d min</string>
     <string name="hidden_auto_lock_on_leave_detail">Se ocultan en cuanto Wallpurr pasa a segundo plano.</string>
