@@ -147,7 +147,6 @@ fun PlaylistDetailScreen(
         )
     }
     val cover = images.firstOrNull()
-    val isScrolling = gridState.isScrollInProgress
     val thumbnailGenerationAllowed = remember(gridState) { { !gridState.isScrollInProgress } }
     val effectiveLockBlur = (
         cover?.takeIf { it.lockStyleOverride }?.lockBlurRadius ?: lockBlurDraft
@@ -253,7 +252,7 @@ fun PlaylistDetailScreen(
                         onSelect = { viewModel.setTarget(it) },
                         cover = cover,
                         filesDir = context.filesDir,
-                        lockBlurRadius = if (isScrolling) 0 else effectiveLockBlur,
+                        lockBlurRadius = effectiveLockBlur,
                         lockOpacity = effectiveLockOpacity,
                     )
                 }
