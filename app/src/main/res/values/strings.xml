@@ -12,6 +12,10 @@
     <string name="hide_playlist">Ocultar playlist</string>
     <string name="unhide">Dejar de ocultar</string>
     <string name="hide_selection">Ocultar</string>
+    <plurals name="folders_selected_count">
+        <item quantity="one">%1$d carpeta</item>
+        <item quantity="other">%1$d carpetas</item>
+    </plurals>
     <string name="hidden_badge">Oculta</string>
     <string name="hidden_title">Contenido oculto</string>
     <string name="hidden_auto_lock_title">Volver a ocultar</string>

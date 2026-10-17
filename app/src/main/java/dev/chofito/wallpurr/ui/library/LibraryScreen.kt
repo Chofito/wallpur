@@ -29,12 +29,14 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -65,6 +67,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -109,6 +112,8 @@ fun LibraryScreen(
     val shown = shownFolderId?.let(imagesByFolder::get).orEmpty()
     var mode by remember { mutableStateOf(PhotoMode.Browse) }
     var selected by remember { mutableStateOf(setOf<String>()) }
+    var selectedFolders by remember { mutableStateOf(setOf<String>()) }
+    val selectingFolders = selectedFolders.isNotEmpty()
     var addMenu by remember { mutableStateOf(false) }
     var moveMenu by remember { mutableStateOf(false) }
     var showActionsMenu by remember { mutableStateOf(false) }
@@ -169,6 +174,7 @@ fun LibraryScreen(
     fun exitModes() {
         mode = PhotoMode.Browse
         selected = emptySet()
+        selectedFolders = emptySet()
         addMenu = false
         moveMenu = false
     }
@@ -180,8 +186,8 @@ fun LibraryScreen(
         moveMenu = false
     }
 
-    BackHandler(enabled = mode != PhotoMode.Browse || currentFolderId != null) {
-        if (mode != PhotoMode.Browse) exitModes() else currentFolderId = null
+    BackHandler(enabled = mode != PhotoMode.Browse || selectingFolders || currentFolderId != null) {
+        if (mode != PhotoMode.Browse || selectingFolders) exitModes() else currentFolderId = null
     }
 
     Scaffold(
@@ -190,6 +196,14 @@ fun LibraryScreen(
             TopAppBar(
                 title = {
                     when {
+                        selectingFolders ->
+                            Text(
+                                pluralStringResource(
+                                    R.plurals.folders_selected_count,
+                                    selectedFolders.size,
+                                    selectedFolders.size,
+                                ),
+                            )
                         mode != PhotoMode.Browse ->
                             Text(stringResource(R.string.selected_count, selected.size))
                         currentFolder != null -> Text(currentFolder.name)
@@ -197,14 +211,18 @@ fun LibraryScreen(
                     }
                 },
                 navigationIcon = {
-                    if (mode != PhotoMode.Browse || currentFolderId != null) {
+                    if (mode != PhotoMode.Browse || selectingFolders || currentFolderId != null) {
                         IconButton(
                             onClick = {
-                                if (mode != PhotoMode.Browse) exitModes() else currentFolderId = null
+                                if (mode != PhotoMode.Browse || selectingFolders) {
+                                    exitModes()
+                                } else {
+                                    currentFolderId = null
+                                }
                             },
                         ) {
                             Icon(
-                                if (mode != PhotoMode.Browse) {
+                                if (mode != PhotoMode.Browse || selectingFolders) {
                                     Icons.Outlined.Close
                                 } else {
                                     Icons.AutoMirrored.Outlined.ArrowBack
@@ -215,7 +233,27 @@ fun LibraryScreen(
                     }
                 },
                 actions = {
-                    if (mode == PhotoMode.Select) {
+                    if (selectingFolders) {
+                        val unhideFolders = userFolders
+                            .filter { it.id in selectedFolders }
+                            .all { it.hidden }
+                        IconButton(
+                            onClick = {
+                                viewModel.setFoldersHidden(selectedFolders.toList(), !unhideFolders)
+                                if (!unhideFolders && !hiddenRevealed) {
+                                    Toast.makeText(context, hiddenHint, Toast.LENGTH_LONG).show()
+                                }
+                                exitModes()
+                            },
+                        ) {
+                            Icon(
+                                if (unhideFolders) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                                contentDescription = stringResource(
+                                    if (unhideFolders) R.string.unhide else R.string.hide_selection,
+                                ),
+                            )
+                        }
+                    } else if (mode == PhotoMode.Select) {
                         IconButton(onClick = { moveMenu = true }) {
                             Icon(
                                 Icons.Outlined.DriveFileMove,
@@ -404,7 +442,7 @@ fun LibraryScreen(
             )
         },
         floatingActionButton = {
-            if (mode == PhotoMode.Browse) {
+            if (mode == PhotoMode.Browse && !selectingFolders) {
                 ExtendedFloatingActionButton(
                     onClick = { launchGallery() },
                     icon = { Icon(Icons.Outlined.AddPhotoAlternate, contentDescription = null) },
@@ -465,9 +503,27 @@ fun LibraryScreen(
                                 MediaKind.from(it.mediaType) == MediaKind.IMAGE
                             } ?: folderImages.firstOrNull(),
                             filesDir = context.filesDir,
+                            selection = when {
+                                !selectingFolders -> null
+                                else -> folder.id in selectedFolders
+                            },
                             onClick = {
-                                exitModes()
-                                currentFolderId = folder.id
+                                if (selectingFolders) {
+                                    selectedFolders = if (folder.id in selectedFolders) {
+                                        selectedFolders - folder.id
+                                    } else {
+                                        selectedFolders + folder.id
+                                    }
+                                } else {
+                                    exitModes()
+                                    currentFolderId = folder.id
+                                }
+                            },
+                            onLongClick = {
+                                if (!selectingFolders) {
+                                    exitModes()
+                                    selectedFolders = setOf(folder.id)
+                                }
                             },
                             modifier = Modifier.animateItem(),
                         )
@@ -506,6 +562,7 @@ fun LibraryScreen(
                     showHiddenBadge = image.hidden || currentFolder?.hidden == true,
                     modifier = Modifier.animateItem(),
                     onClick = {
+                        if (selectingFolders) return@PhotoTile
                         when (mode) {
                             PhotoMode.Browse -> onEdit(image.id)
                             PhotoMode.Select, PhotoMode.Reorder -> {
@@ -514,7 +571,7 @@ fun LibraryScreen(
                         }
                     },
                     onLongClick = {
-                        if (mode == PhotoMode.Browse) {
+                        if (mode == PhotoMode.Browse && !selectingFolders) {
                             mode = PhotoMode.Select
                             selected = setOf(image.id)
                         }
@@ -609,9 +666,12 @@ private fun FolderRow(
     preview: ImageAssetEntity?,
     filesDir: java.io.File,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    // null outside folder selection; otherwise whether this folder is selected.
+    selection: Boolean? = null,
 ) {
-    PurrCard(onClick = onClick, modifier = modifier) {
+    PurrCard(onClick = onClick, onLongClick = onLongClick, modifier = modifier) {
         ListItem(
             headlineContent = {
                 Text(folder.name, style = MaterialTheme.typography.titleMedium)
@@ -651,11 +711,23 @@ private fun FolderRow(
                 }
             },
             trailingContent = {
-                Icon(
-                    Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                when (selection) {
+                    null -> Icon(
+                        Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    true -> Icon(
+                        Icons.Outlined.CheckCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    false -> Icon(
+                        Icons.Outlined.RadioButtonUnchecked,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         )
