@@ -96,8 +96,10 @@ fun SettingsScreen(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(24.dp)
-                .verticalScroll(rememberScrollState()),
+                // Padding inside the scroll container: outside it, the content was clipped 24 dp
+                // short of the top bar and the navigation bar, leaving empty bands while scrolling.
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
