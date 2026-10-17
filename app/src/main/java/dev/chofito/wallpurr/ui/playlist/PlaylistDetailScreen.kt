@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -502,7 +501,6 @@ private fun DestinationTile(
                     .background(Color.Black)
                     .clickable(onClick = onClick),
             ) {
-                val tileWidth = maxWidth
                 val tileHeight = maxHeight
                 when (target) {
                     WallpaperTarget.HOME -> {
@@ -560,11 +558,9 @@ private fun DestinationTile(
                                     .fillMaxSize()
                                     .lockPreviewEffect(lockBlurRadius, lockOpacity),
                             )
-                            LockPreviewClock(
-                                Modifier
-                                    .requiredSize(tileWidth, tileHeight)
-                                    .offset(x = -(tileWidth / 2)),
-                            )
+                            // Fills the lock half: the previous full-tile overlay was shifted so it
+                            // shaded only part of this half and pushed the clock out of view.
+                            LockPreviewClock(Modifier.fillMaxSize())
                         }
                         Box(
                             Modifier
