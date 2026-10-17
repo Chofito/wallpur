@@ -150,7 +150,6 @@
     <string name="add_to_playlist">Añadir a playlist</string>
     <string name="remaining">Siguientes en este ciclo: %1$d</string>
     <string name="reorder_hint">Arrastra para reordenar</string>
-    <string name="selected_count">%1$d seleccionadas</string>
     <string name="shuffle_reset">Barajar de nuevo</string>
     <string name="follow_list_order">Seguir el orden de la lista</string>
     <string name="use_wallpaper_now">Usar este fondo ahora</string>

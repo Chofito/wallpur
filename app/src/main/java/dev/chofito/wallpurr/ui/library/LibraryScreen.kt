@@ -69,6 +69,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chofito.wallpurr.R
@@ -203,10 +204,16 @@ fun LibraryScreen(
                                     selectedFolders.size,
                                     selectedFolders.size,
                                 ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
-                        mode != PhotoMode.Browse ->
-                            Text(stringResource(R.string.selected_count, selected.size))
-                        currentFolder != null -> Text(currentFolder.name)
+                        // Only the count: on a phone the selection actions leave no room for a label.
+                        mode != PhotoMode.Browse -> Text(selected.size.toString(), maxLines = 1)
+                        currentFolder != null -> Text(
+                            currentFolder.name,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                         else -> HiddenRevealTitle(stringResource(R.string.nav_library))
                     }
                 },
