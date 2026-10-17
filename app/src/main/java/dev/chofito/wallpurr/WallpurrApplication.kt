@@ -46,6 +46,7 @@ class AppContainer(app: Application) {
         WallpurrDatabase.MIGRATION_2_3,
         WallpurrDatabase.MIGRATION_3_4,
         WallpurrDatabase.MIGRATION_4_5,
+        WallpurrDatabase.MIGRATION_5_6,
     ).build()
 
     val files = ImageFileStore(app)

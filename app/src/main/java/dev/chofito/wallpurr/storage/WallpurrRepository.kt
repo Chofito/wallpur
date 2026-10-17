@@ -59,7 +59,7 @@ class WallpurrRepository(
         }
     private val allImages: Flow<List<ImageAssetEntity>> = db.images().observeAll()
 
-    /** Library media, without the contents of hidden folders unless they are revealed. */
+    /** Library media, without hidden media or the contents of hidden folders unless revealed. */
     val images: Flow<List<ImageAssetEntity>> = combine(
         allImages,
         db.folders().observeAll(),
@@ -69,7 +69,7 @@ class WallpurrRepository(
             list
         } else {
             val hiddenFolderIds = folderList.filter { it.hidden }.map { it.id }.toSet()
-            if (hiddenFolderIds.isEmpty()) list else list.filterNot { it.folderId in hiddenFolderIds }
+            list.filterNot { it.hidden || it.folderId in hiddenFolderIds }
         }
     }
     val playlistCards: Flow<List<PlaylistCard>> = combine(
@@ -177,10 +177,18 @@ class WallpurrRepository(
     }
 
     suspend fun setFolderHidden(id: String, hidden: Boolean) {
+        setFoldersHidden(listOf(id), hidden)
+    }
+
+    suspend fun setFoldersHidden(ids: List<String>, hidden: Boolean) {
         // The library root holds unfiled media; hiding it would hide the whole library.
-        if (id == libraryFolderId()) return
-        val existing = db.folders().get(id) ?: return
-        db.folders().update(existing.copy(hidden = hidden))
+        val rootId = libraryFolderId()
+        val targets = ids.filter { it != rootId }
+        if (targets.isNotEmpty()) db.folders().setHidden(targets, hidden)
+    }
+
+    suspend fun setImagesHidden(ids: List<String>, hidden: Boolean) {
+        if (ids.isNotEmpty()) db.images().setHidden(ids, hidden)
     }
 
     suspend fun deleteFolder(id: String) {
@@ -824,6 +832,7 @@ private fun ImageAssetEntity.toDto(transforms: List<ImageTransformEntity>) = Ima
             containBackgroundColor = it.containBackgroundColor,
         )
     },
+    hidden = hidden,
 )
 private fun ImageDto.toEntity() = ImageAssetEntity(
     id = id,
@@ -841,6 +850,7 @@ private fun ImageDto.toEntity() = ImageAssetEntity(
     lockStyleOverride = lockStyleOverride,
     lockBlurRadius = lockBlurRadius,
     lockOpacity = lockOpacity,
+    hidden = hidden,
 )
 private fun PlaylistEntity.toDto(imageIds: List<String>) =
     PlaylistDto(

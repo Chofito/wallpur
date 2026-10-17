@@ -29,6 +29,9 @@ interface FolderDao {
         if (insert(folder) == -1L) update(folder)
     }
 
+    @Query("UPDATE folders SET hidden = :hidden WHERE id IN (:ids)")
+    suspend fun setHidden(ids: List<String>, hidden: Boolean)
+
     @Query("DELETE FROM folders WHERE id = :id")
     suspend fun delete(id: String)
 }
@@ -60,6 +63,9 @@ interface ImageDao {
 
     @Query("DELETE FROM images WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("UPDATE images SET hidden = :hidden WHERE id IN (:ids)")
+    suspend fun setHidden(ids: List<String>, hidden: Boolean)
 
     @Query("UPDATE images SET folderId = :folderId WHERE id IN (:ids)")
     suspend fun moveToFolder(ids: List<String>, folderId: String)

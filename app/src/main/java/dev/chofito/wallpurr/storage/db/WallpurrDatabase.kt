@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ShuffleCursorEntity::class,
         SettingEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class WallpurrDatabase : RoomDatabase() {
@@ -64,6 +64,12 @@ abstract class WallpurrDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE folders ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE playlists ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE images ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

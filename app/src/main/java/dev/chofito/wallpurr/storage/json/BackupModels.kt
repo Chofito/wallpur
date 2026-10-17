@@ -37,6 +37,7 @@ data class ImageDto(
     val lockBlurRadius: Int = 0,
     val lockOpacity: Float = 1f,
     val transforms: List<TransformDto> = emptyList(),
+    val hidden: Boolean = false,
 )
 
 @Serializable

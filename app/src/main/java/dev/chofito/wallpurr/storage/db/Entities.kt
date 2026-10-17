@@ -43,6 +43,7 @@ data class ImageAssetEntity(
     val lockStyleOverride: Boolean = false,
     val lockBlurRadius: Int = 0,
     val lockOpacity: Float = 1f,
+    @ColumnInfo(defaultValue = "0") val hidden: Boolean = false,
 )
 
 @Entity(
