@@ -79,6 +79,14 @@ class LibraryViewModel(
         viewModelScope.launch { repository.renameFolder(id, name) }
     }
 
+    fun setImagesHidden(ids: List<String>, hidden: Boolean) {
+        viewModelScope.launch { repository.setImagesHidden(ids, hidden) }
+    }
+
+    fun setFoldersHidden(ids: List<String>, hidden: Boolean) {
+        viewModelScope.launch { repository.setFoldersHidden(ids, hidden) }
+    }
+
     fun setFolderHidden(id: String, hidden: Boolean) {
         viewModelScope.launch { repository.setFolderHidden(id, hidden) }
     }

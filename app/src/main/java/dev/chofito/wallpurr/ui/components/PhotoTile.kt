@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.DragHandle
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -36,6 +37,8 @@ fun PhotoTile(
     modifier: Modifier = Modifier,
     active: Boolean = false,
     thumbnailGenerationAllowed: () -> Boolean = { true },
+    // Only the library passes this; playlist grids must not advertise which items are hidden.
+    showHiddenBadge: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     overlay: @Composable BoxScope.() -> Unit = {},
@@ -52,6 +55,19 @@ fun PhotoTile(
             active = active && mode == PhotoMode.Browse,
             thumbnailGenerationAllowed = thumbnailGenerationAllowed,
         )
+        if (showHiddenBadge) {
+            Icon(
+                imageVector = Icons.Outlined.VisibilityOff,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+                    .background(Color.Black.copy(alpha = 0.45f), CircleShape)
+                    .padding(4.dp)
+                    .size(16.dp),
+            )
+        }
         if (mode == PhotoMode.Select) {
             Box(
                 Modifier

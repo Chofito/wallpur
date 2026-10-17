@@ -35,6 +35,8 @@ import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -271,6 +273,27 @@ fun LibraryScreen(
                                 },
                             )
                         }
+                        // Unhide only when every selected item is already hidden (possible only while
+                        // hidden content is revealed); any visible item makes the action "hide".
+                        val unhideSelection = selected.isNotEmpty() &&
+                            shown.filter { it.id in selected }.all { it.hidden }
+                        IconButton(
+                            onClick = {
+                                viewModel.setImagesHidden(selected.toList(), !unhideSelection)
+                                if (!unhideSelection && !hiddenRevealed) {
+                                    Toast.makeText(context, hiddenHint, Toast.LENGTH_LONG).show()
+                                }
+                                exitModes()
+                            },
+                            enabled = selected.isNotEmpty(),
+                        ) {
+                            Icon(
+                                if (unhideSelection) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                                contentDescription = stringResource(
+                                    if (unhideSelection) R.string.unhide else R.string.hide_selection,
+                                ),
+                            )
+                        }
                         IconButton(
                             onClick = {
                                 viewModel.delete(selected.toList())
@@ -478,6 +501,7 @@ fun LibraryScreen(
                     selected = image.id in selected,
                     active = image.id in activeIds,
                     thumbnailGenerationAllowed = thumbnailGenerationAllowed,
+                    showHiddenBadge = image.hidden,
                     modifier = Modifier.animateItem(),
                     onClick = {
                         when (mode) {
