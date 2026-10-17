@@ -277,7 +277,9 @@ fun LibraryScreen(
                         // hidden content is revealed); any visible item makes the action "hide".
                         val unhideSelection = selected.isNotEmpty() &&
                             shown.filter { it.id in selected }.all { it.hidden }
-                        IconButton(
+                        // Inside a hidden folder everything is already hidden by the folder, and
+                        // clearing the per-image flag would have no visible effect.
+                        if (currentFolder?.hidden != true) IconButton(
                             onClick = {
                                 viewModel.setImagesHidden(selected.toList(), !unhideSelection)
                                 if (!unhideSelection && !hiddenRevealed) {
@@ -501,7 +503,7 @@ fun LibraryScreen(
                     selected = image.id in selected,
                     active = image.id in activeIds,
                     thumbnailGenerationAllowed = thumbnailGenerationAllowed,
-                    showHiddenBadge = image.hidden,
+                    showHiddenBadge = image.hidden || currentFolder?.hidden == true,
                     modifier = Modifier.animateItem(),
                     onClick = {
                         when (mode) {
