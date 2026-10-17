@@ -21,7 +21,7 @@ flowchart TD
     Activity["MainActivity / intents compartidos"] --> UI["Compose UI"]
     UI --> VM["ViewModels"]
     VM --> Repo["WallpurrRepository"]
-    Repo --> Room["Room v5"]
+    Repo --> Room["Room v6"]
     Repo --> Files["filesDir/images"]
     Repo --> Backup["JSON / ZIP"]
     VM --> Rotation["RotationController"]
@@ -84,12 +84,12 @@ Al importar:
 
 La app usa la copia después de importar; no depende de que el URI original siga disponible.
 
-### Room v5
+### Room v6
 
 | Tabla | Propósito |
 | --- | --- |
 | `folders` | Biblioteca raíz y carpetas creadas por el usuario; marca `hidden` |
-| `images` | Metadata del medio y configuración de video/lock propia |
+| `images` | Metadata del medio, configuración de video/lock propia y marca `hidden` |
 | `transforms` | Perfil por `imageId + orientation` |
 | `playlists` | Nombre, intervalo, destino, estilo de lock base y marca `hidden` |
 | `playlist_items` | Relación y `sortOrder` |
@@ -136,6 +136,7 @@ No guarda objetos de UI ni referencias a `Surface`/`Bitmap` de runtime.
 ### Contenido oculto
 
 - `HiddenContentGate` (en `AppContainer`) guarda en memoria si lo oculto está revelado. Nunca se persiste: un arranque en frío empieza oculto.
+- Una imagen está oculta si tiene su propia marca o si su carpeta está oculta. Es un estado derivado: ocultar una carpeta no escribe la marca en sus imágenes, así mostrarla de nuevo respeta las que se ocultaron una por una, y mover una imagen fuera de una carpeta oculta la vuelve visible.
 - Los flows `folders`, `playlists` e `images` del repository filtran lo oculto, así que todas las pantallas y selectores respetan el estado sin lógica propia. El contenido de una playlist visible no se filtra: muestra lo que el fondo va a mostrar, y una lista parcial rompería el reordenamiento.
 - Se revela con pulsación larga en el título de Biblioteca o Playlists y `BiometricPrompt` (biometría débil o credencial del dispositivo; en Android 9, `createConfirmDeviceCredentialIntent`). Sin bloqueo de pantalla basta el gesto.
 - `MainActivity.onStop` (sin contar la recreación por rotación) aplica la política: al salir, tras N minutos o manual. Al ocultarse, la navegación vuelve a las pestañas. En Android 13+ se desactiva la captura de Recientes mientras está revelado.

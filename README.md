@@ -31,7 +31,7 @@ Consulta [PROGRESS.md](PROGRESS.md) para el inventario de implementación y [LIM
 - Notificación persistente personalizada con miniatura, playlist, destino, próximo cambio, posición y controles.
 - Política de ahorro de energía: ignorar o congelar la playlist en contenido estático.
 - Exportación/importación JSON y ZIP con los archivos privados.
-- Carpetas y playlists ocultas: se revelan manteniendo presionado el título de Biblioteca o Playlists y confirmando con huella/PIN; vuelven a ocultarse al salir, tras N minutos o con el candado. Es discreción, no cifrado.
+- Carpetas, imágenes y playlists ocultas (las imágenes y carpetas también en lote desde la selección múltiple): se revelan manteniendo presionado el título de Biblioteca o Playlists y confirmando con huella/PIN; vuelven a ocultarse al salir, tras N minutos o con el candado. Es discreción, no cifrado.
 
 ## Comportamiento por destino
 
@@ -47,7 +47,7 @@ El selector del sistema decide dónde instala el live wallpaper. Wallpurr inspec
 
 - Kotlin 2.2, Java 11.
 - Jetpack Compose + Material 3 + Navigation Compose.
-- Room 2.7, esquema actual v5.
+- Room 2.7, esquema actual v6.
 - WorkManager para el siguiente cambio persistente.
 - `MediaPlayer` + EGL/OpenGL ES para el wallpaper de video.
 - Media3/ExoPlayer únicamente para previews de video en cuadrículas.
